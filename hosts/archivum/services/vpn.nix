@@ -1,0 +1,7 @@
+{ ... }:
+{
+  vpnNamespaces.qbtvpn = {
+    enable = true;
+
+  };
+}

@@ -1,0 +1,51 @@
+{ pkgs, ... }:
+{
+  services.samba = {
+    enable = true;
+    openFirewall = true;
+    package = pkgs.samba4Full;
+    settings = {
+      global = {
+        "workgroup" = "WORKGROUP";
+        "server string" = "Archivum";
+        "netbio name" = "archivum";
+        "security" = "user";
+        "map to guest" = "bad user";
+        "guest account" = "nobody";
+      };
+      "media" = {
+        "path" = "/mnt/zpool1/media";
+        "comment" = "Media files (movies, series, music)";
+        "browseable" = "yes";
+        "read only" = "no";
+        "guest ok" = "yes";
+        "create mask" = "0644";
+        "directory mask" = "0755";
+        "force user" = ""; # TODO: user
+        "force group" = "";
+      };
+      "noxfiles" = {
+        "path" = "/mnt/zpool1/noxfiles";
+        "comment" = "Nox' files";
+        "browseable" = "yes";
+        "read only" = "no";
+        "guest ok" = "no";
+        "create mask" = "0644";
+        "directory mask" = "0755";
+        "force user" = "nox";
+        "force group" = "users";
+        "valid users" = "nox";
+      };
+    };
+    extraConfig = ''
+      smbd profiling level = on
+    '';
+  };
+
+  services.samba-wsdd = {
+    enable = true;
+    openFirewall = true;
+  };
+}
+
+# TODO: do I need to set up logrotate?
