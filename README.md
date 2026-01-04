@@ -1,0 +1,3 @@
+# Nox server configuration
+
+## Installation
