@@ -42,6 +42,12 @@
             ./hosts/quaesitum/configuration.nix
           ];
         };
+        fabricum = nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./hosts/fabricum/configuration.nix
+          ];
+        };
       };
     };
 }

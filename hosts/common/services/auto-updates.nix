@@ -18,7 +18,7 @@
       git pull --ff-only
     '';
     serviceConfig = {
-      WorkingDirectory = "/etc/nixos";
+      WorkingDirectory = "/home/nox/etc/nixos";
       User = "nox"; # user that owns the repository
       Type = "oneshot";
     };

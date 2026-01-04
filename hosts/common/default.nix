@@ -5,6 +5,7 @@
 
 {
   imports = [
+    ./programs
     ./services
   ];
   services.fstrim.enable = true;
@@ -31,7 +32,7 @@
       initialPassword = "changeme";
       isNormalUser = true;
       openssh.authorizedKeys.keys = [
-        # TODO: add ssh keys
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ6cR1O87RX+NOt5EUBPdT0XNinMG7mGtkSz61hbr4za nox@fwdesktop"
       ];
       extraGroups = [
         "wheel"
