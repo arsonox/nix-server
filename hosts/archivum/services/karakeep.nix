@@ -1,4 +1,6 @@
-{ ... }:
+{
+  ...
+}:
 
 {
   serivces.karakeep = {

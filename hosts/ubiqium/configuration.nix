@@ -9,7 +9,7 @@
     ../common
   ];
 
-  networking.hostName = "archivum";
+  networking.hostName = "ubiqium";
 
   #### TODO: Add settings here
 

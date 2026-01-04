@@ -1,4 +1,7 @@
-{ ... }:
+{
+  ...
+}:
+
 {
   services.avahi = {
     enable = true;

@@ -1,4 +1,4 @@
-name: update-dependencies
+name: update-flake
 on:
   workflow_dispatch: # allows manual triggering
   schedule:

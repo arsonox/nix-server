@@ -1,4 +1,8 @@
-{ pkgs, ... }:
+{
+  pkgs,
+  ...
+}:
+
 {
   services.samba = {
     enable = true;
@@ -24,8 +28,8 @@
         "force user" = ""; # TODO: user
         "force group" = "";
       };
-      "noxfiles" = {
-        "path" = "/mnt/zpool1/noxfiles";
+      "nox" = {
+        "path" = "/mnt/zpool1/nox";
         "comment" = "Nox' files";
         "browseable" = "yes";
         "read only" = "no";

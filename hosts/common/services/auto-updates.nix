@@ -1,4 +1,8 @@
-{ pkgs, ... }:
+{
+  pkgs,
+  ...
+}:
+
 {
   systemd.services.pull-updates = {
     description = "Pulls changes to system config";

@@ -30,6 +30,18 @@
             vpn-confinement.nixosModules.default
           ];
         };
+        ubiqium = nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./hosts/ubiqium/configuration.nix
+          ];
+        };
+        quaesitum = nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./hosts/quaesitum/configuration.nix
+          ];
+        };
       };
     };
 }
