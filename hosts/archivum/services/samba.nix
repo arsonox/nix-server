@@ -16,6 +16,7 @@
         "security" = "user";
         "map to guest" = "bad user";
         "guest account" = "nobody";
+        "smbd profiling level" = "on";
       };
       "media" = {
         "path" = "/mnt/zpool1/media";
@@ -41,9 +42,6 @@
         "valid users" = "nox";
       };
     };
-    extraConfig = ''
-      smbd profiling level = on
-    '';
   };
 
   services.samba-wsdd = {
