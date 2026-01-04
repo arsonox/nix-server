@@ -10,6 +10,7 @@
   ];
 
   networking.hostName = "archivum";
+  networking.hostId = ""; # TODO: add hostId
 
   #### TODO: Add settings here
 
