@@ -32,18 +32,16 @@
         # nix run git+https://codeberg.org/feathecutie/qbittorrent_password -- -p [password here]
         Password_PBKDF2 = "@ByteArray(JZ5/MxLJ1RAG6FO9E9qE3g==:R41kCnc/Sw/4ekMTD0uBT9DYyLzY/RUuAmPq2lMXZ6z8qalsVXIbxquEunMrpDZZmAgAzb3BvOfsrEHB9fMzww==)";
       };
-      BitTorrent.Session = [
-        {
-          DefaultSavePath = "/mnt/zpool1/media";
-          TempPath = "/mnt/zpool1/incomplete";
-          TempPathEnabled = true;
-          AnonymousModeEnabled = true;
-          GlobalMaxSeedingMinutes = -1;
-          MaxActiveTorrents = -1;
-          MaxActiveDownloads = 8;
-          MaxActiveUploads = -1;
-        }
-      ];
+      BitTorrent.Session = {
+        DefaultSavePath = "/mnt/zpool1/media";
+        TempPath = "/mnt/zpool1/incomplete";
+        TempPathEnabled = true;
+        AnonymousModeEnabled = true;
+        GlobalMaxSeedingMinutes = -1;
+        MaxActiveTorrents = -1;
+        MaxActiveDownloads = 8;
+        MaxActiveUploads = -1;
+      };
     };
   };
 

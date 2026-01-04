@@ -11,19 +11,19 @@
       statdPort = 4000;
 
       exports = '''';
-
-      extraNfsdConfig = ''
-        [nfsd]
-        vers2=n
-        vers3=y
-        vers4=y
-        vers4.0=y
-        vers4.1=y
-        vers4.2=y
-
-        [exportfs]
-        debug=0
-      '';
+    };
+    settings = {
+      nfsd = {
+        vers2 = false;
+        vers3 = true;
+        vers4 = true;
+        vers4_0 = true;
+        vers4_1 = true;
+        vers4_2 = true;
+      };
+      exportfs = {
+        debug = 0;
+      };
     };
   };
 
