@@ -73,7 +73,7 @@
         base_url = "https://sx.nox.onl";
         port = 8888;
         bind_address = "127.0.0.1";
-        # secret_key = ;
+        secret_key = builtins.readFile ../secrets/searxng-secret;
         limiter = true;
         public_instance = true;
         image_proxy = true;
