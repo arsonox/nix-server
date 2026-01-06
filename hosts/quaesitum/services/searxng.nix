@@ -83,12 +83,12 @@
       # Search engines
       engines = lib.mapAttrsToList (name: value: { inherit name; } // value) {
         "duckduckgo".disabled = false;
-        "brave".disabled = false;
-        "bing".disabled = false;
+        "brave".disabled = true;
+        "bing".disabled = true;
         "mojeek".disabled = true;
         "mwmbl".disabled = false;
         "mwmbl".weight = 0.4;
-        "qwant".disabled = true;
+        "qwant".disabled = false;
         "crowdview".disabled = false;
         "crowdview".weight = 0.5;
         "curlie".disabled = true;

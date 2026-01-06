@@ -18,6 +18,11 @@ in
     recommendedProxySettings = true;
     recommendedTlsSettings = true;
     virtualHosts = {
+      "s.nox.onl" = {
+        forceSSL = true;
+        enableACME = true;
+        locations."/".return = "301 https://sx.nox.onl";
+      };
       "sx.nox.onl" = {
         forceSSL = true;
         enableACME = true;
