@@ -7,11 +7,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1767514898,
-        "narHash": "sha256-ONYqnKrPzfKEEPChoJ9qPcfvBqW9ZgieDKD7UezWPg4=",
+        "lastModified": 1767619900,
+        "narHash": "sha256-KpoCBPvwHz3gAQtIUkohE2InRBFK3r0/FM6z5SPWfvM=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "7a06e8a2f844e128d3b210a000a62716b6040b7f",
+        "rev": "6bd04da47cfb48dfd15eabf08364b78ad894f5b2",
         "type": "github"
       },
       "original": {
@@ -63,11 +63,11 @@
     },
     "vpn-confinement": {
       "locked": {
-        "lastModified": 1765634578,
-        "narHash": "sha256-Fujb9sn1cj+u/bzfo2RbQkcAvJ7Ch1pimJzFie4ptb4=",
+        "lastModified": 1767604552,
+        "narHash": "sha256-FddhMxnc99KYOZ/S3YNqtDSoxisIhVtJ7L4s8XD2u0A=",
         "owner": "Maroka-chan",
         "repo": "VPN-Confinement",
-        "rev": "f2989e1e3cb06c7185939e9ddc368f88b998616a",
+        "rev": "a6b2da727853886876fd1081d6bb2880752937f3",
         "type": "github"
       },
       "original": {
