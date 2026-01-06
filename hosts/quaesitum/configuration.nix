@@ -8,7 +8,6 @@
     ./hardware-configuration.nix
     ./services
     ../common
-    ./secrets/acme.nix
   ];
 
   networking = {
