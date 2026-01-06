@@ -1,4 +1,5 @@
 {
+  lib,
   ...
 }:
 
@@ -13,7 +14,7 @@
   networking = {
     hostName = "quaesitum";
     interfaces.enp0s1 = {
-      ipv6.address = [
+      ipv6.addresses = [
         {
           address = "2a01:4f8:c013:85f::1";
           prefixLength = 64;
@@ -44,6 +45,14 @@
   };
 
   services.qemuGuest.enable = true;
+
+  # Hetzner does not support UEFI on the old servers I'm currently on.
+  # So just for this machine we make an exception and use GRUB instead.
+  boot.loader.systemd-boot.enable = lib.mkForce false;
+  boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
+
+  boot.loader.grub.enable = true;
+  boot.loader.grub.device = "/dev/sda";
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion
   system.stateVersion = "25.11";
