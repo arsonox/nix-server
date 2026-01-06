@@ -70,7 +70,7 @@
 
       # Server configuration
       server = {
-        base_url = "https://s.nox.onl";
+        base_url = "https://sx.nox.onl";
         port = 8888;
         bind_address = "127.0.0.1";
         # secret_key = ;
@@ -82,8 +82,8 @@
 
       # Search engines
       engines = lib.mapAttrsToList (name: value: { inherit name; } // value) {
-        "duckduckgo".disabled = true;
-        "brave".disabled = true;
+        "duckduckgo".disabled = false;
+        "brave".disabled = false;
         "bing".disabled = false;
         "mojeek".disabled = true;
         "mwmbl".disabled = false;

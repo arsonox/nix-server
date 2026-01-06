@@ -12,7 +12,7 @@
     recommendedProxySettings = true;
     recommendedTlsSettings = true;
     virtualHosts = {
-      "s.nox.onl" = {
+      "sx.nox.onl" = {
         forceSSL = true;
         enableACME = true;
         locations = {
