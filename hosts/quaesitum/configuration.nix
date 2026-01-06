@@ -12,7 +12,7 @@
 
   networking = {
     hostName = "quaesitum";
-    interfaces.enp0s1 = {
+    interfaces.enp1s0 = {
       ipv6.addresses = [
         {
           address = "2a01:4f8:c013:85f::1";
@@ -29,12 +29,12 @@
 
     defaultGateway = {
       address = "172.31.1.1";
-      interface = "enp0s1";
+      interface = "enp1s0";
     };
 
     defaultGateway6 = {
       address = "fe80::1";
-      interface = "enp0s1";
+      interface = "enp1s0";
     };
 
     nameservers = [
