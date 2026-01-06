@@ -34,4 +34,9 @@ in
 
   security.acme.acceptTerms = true;
   security.acme.defaults.email = if emailAddress.success then emailAddress.value else "";
+
+  networking.firewall.allowedTCPPorts = [
+    80
+    443
+  ];
 }
