@@ -4,6 +4,11 @@
   ...
 }:
 
+let
+  # The email address is encrypted so if it cannot be read we'll use an empty
+  # string until git-crypt can be enabled to decrypt the file.
+  emailAddress = builtins.tryEval (builtins.readFile ../secrets/email);
+in
 {
   # Nginx configuration
   services.nginx = {
@@ -28,5 +33,5 @@
   };
 
   security.acme.acceptTerms = true;
-  security.acme.defaults.email = lib.readFile ../secrets/email;
+  security.acme.defaults.email = if emailAddress.success then emailAddress.value else "";
 }
