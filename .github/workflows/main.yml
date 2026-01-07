@@ -2,7 +2,7 @@ name: update-flake
 on:
   workflow_dispatch: # allows manual triggering
   schedule:
-    - cron: "0 6 * * *" # daily at 1 am EST/2 am EDT
+    - cron: "0 1 * * *" # daily at 1 am UTC
 
 jobs:
   update-dependencies:
