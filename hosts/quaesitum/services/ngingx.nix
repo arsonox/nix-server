@@ -17,6 +17,12 @@ in
     recommendedOptimisation = true;
     recommendedProxySettings = true;
     recommendedTlsSettings = true;
+
+    commonHttpConfig = ''
+      http2 on;
+      ssl_early_data on;
+    '';
+
     virtualHosts = {
       "s.nox.onl" = {
         forceSSL = true;
@@ -26,10 +32,13 @@ in
       "sx.nox.onl" = {
         forceSSL = true;
         enableACME = true;
+        http3 = true;
+        quic = true;
         locations = {
           "/" = {
             extraConfig = ''
               uwsgi_pass unix:${config.services.searx.uwsgiConfig.socket};
+              add_header Alt-Svc 'h3=":443"; ma=86400' always;
             '';
           };
         };
@@ -42,6 +51,9 @@ in
 
   networking.firewall.allowedTCPPorts = [
     80
+    443
+  ];
+  networking.firewall.allowedUDPPorts = [
     443
   ];
 }
