@@ -15,6 +15,8 @@
   # head -c4 /dev/urandom | od -A none -t x4
   networking.hostId = "4b6d8560";
 
+  hardware.enableAllFirmware = true;
+
   #### TODO: Add settings here
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion

@@ -28,8 +28,6 @@
     };
   };
 
-  hardware.enableAllFirmware = true;
-
   users.users = {
     nox = {
       initialPassword = "changeme";
