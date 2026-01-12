@@ -18,6 +18,8 @@
       ClientAliveCountMax = 0;
       AllowUsers = [ "nox" ];
       TCPKeepAlive = false;
+      AllowTcpForwarding = false;
+      AllowAgentForwarding = false;
       KexAlgorithms = [
         # Post-Quantum: https://www.openssh.org/pq.html
         "mlkem768x25519-sha256"
