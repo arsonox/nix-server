@@ -14,5 +14,8 @@
     nixfmt
     nixd
     package-version-server
+    claude-code
+    claude-code-router
+    claude-code-acp
   ];
 }
