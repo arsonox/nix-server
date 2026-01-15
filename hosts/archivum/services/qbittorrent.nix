@@ -18,12 +18,19 @@
         protocol = "tcp";
       }
     ];
+    openVPNports = [
+      {
+        port = 57140;
+        protocol = "both";
+      }
+    ];
   };
 
   services.qbittorrent = {
     enable = true;
     openFirewall = false;
     webuiPort = 8080;
+    torrentingPort = 57140;
     serverConfig = {
       Core.AutoDeleteAddedTorrentFile = "Never";
       Preferences.WebUI = {
