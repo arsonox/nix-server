@@ -6,6 +6,7 @@
   imports = [
     ./hardware-configuration.nix
     ./services
+    ./programs
     ../common
   ];
 
@@ -14,6 +15,10 @@
   # We need a hostId for ZFS. We can generate one using
   # head -c4 /dev/urandom | od -A none -t x4
   networking.hostId = "4b6d8560";
+
+  services.zfs.autoScrub = {
+    enable = true;
+  };
 
   hardware.enableAllFirmware = true;
 
