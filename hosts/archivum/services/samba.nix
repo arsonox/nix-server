@@ -19,7 +19,7 @@
         "smbd profiling level" = "on";
       };
       "media" = {
-        "path" = "/mnt/zpool1/media";
+        "path" = "/mnt/tank/media";
         "comment" = "Media files (movies, series, music)";
         "browseable" = "yes";
         "read only" = "no";
@@ -30,7 +30,7 @@
         "force group" = "";
       };
       "nox" = {
-        "path" = "/mnt/zpool1/nox";
+        "path" = "/mnt/tank/nox";
         "comment" = "Nox' files";
         "browseable" = "yes";
         "read only" = "no";

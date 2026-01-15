@@ -7,7 +7,7 @@
   services.karakeep = {
     enable = true;
     # extraEnvironment = {
-    #   DATA_DIR = lib.mkForce "/mnt/zpool1/karakeep";
+    #   DATA_DIR = lib.mkForce "/mnt/tank/karakeep";
     # };
   };
 
