@@ -24,6 +24,12 @@
           filter_link_local = true;
           link_token = true;
         };
+        ip_lists = {
+          pass_ip = [
+            "45.80.169.7/32"
+            "2a10:3781:4232::/48"
+          ];
+        };
       };
     };
 

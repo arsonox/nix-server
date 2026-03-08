@@ -18,7 +18,7 @@
         protocol = "tcp";
       }
     ];
-    openVPNports = [
+    openVPNPorts = [
       {
         port = 57140;
         protocol = "both";
