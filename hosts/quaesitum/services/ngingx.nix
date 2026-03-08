@@ -39,6 +39,8 @@ in
             extraConfig = ''
               uwsgi_pass unix:${config.services.searx.uwsgiConfig.socket};
               add_header Alt-Svc 'h3=":443"; ma=86400' always;
+              uwsgi_param HTTP_X_REAL_IP $remote_addr;
+              uwsgi_param HTTP_X_FORWARDED_FOR $proxy_add_x_forwarded_for;
             '';
           };
         };
