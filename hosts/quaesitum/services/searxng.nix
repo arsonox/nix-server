@@ -21,7 +21,7 @@
 
       botdetection = {
         trusted_proxies = [
-          "127.0.0.1/8"
+          "127.0.0.0/8"
           "::1"
         ];
         ip_limit = {
