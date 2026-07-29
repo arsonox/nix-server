@@ -16,6 +16,6 @@
     package-version-server
     claude-code
     claude-code-router
-    claude-code-acp
+    claude-agent-acp
   ];
 }

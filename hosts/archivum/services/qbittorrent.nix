@@ -66,6 +66,10 @@
     vpnNamespace = "qbtwg";
   };
 
+  # Downloads land in /mnt/tank/media, which is shared with the samba `media`
+  # share (see services/samba.nix) - keep them writable by the media group.
+  systemd.services.qbittorrent.serviceConfig.UMask = "0002";
+
   networking.firewall = {
     allowedTCPPorts = [ 8080 ];
   };

@@ -20,6 +20,7 @@
       nixpkgs,
       home-manager,
       vpn-confinement,
+      claude-code,
       ...
     }@inputs:
     let
