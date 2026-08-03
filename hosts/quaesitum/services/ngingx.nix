@@ -7,7 +7,7 @@
 let
   # The email address is encrypted so if it cannot be read we'll use an empty
   # string until git-crypt can be enabled to decrypt the file.
-  emailAddress = builtins.tryEval (builtins.readFile ../secrets/email);
+  emailAddress = builtins.tryEval (builtins.readFile ../../../secrets/email);
 in
 {
   # Nginx configuration
