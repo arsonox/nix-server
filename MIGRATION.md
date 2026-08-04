@@ -1,0 +1,543 @@
+# Proxmox → archivum migration roadmap
+
+Goal: retire the Proxmox host (loud, power-hungry) and land its remaining
+workloads on **archivum**, which becomes the main home server.
+
+Decisions taken (2026-07-29):
+
+- Prefer upstream NixOS modules; `virtualisation.oci-containers` with **podman**
+  is an accepted *temporary* fallback where no module exists. Two permanent
+  exceptions: openspeedtest (no module anywhere) and UniFi OS Server (the only
+  non-deprecated option is a third-party flake running podman).
+- Secrets stay as they are (git-crypt over `secrets/**`); sops-nix is a possible
+  later step, not a blocker.
+- Offsite backups currently run from the **TrueNAS VM** to a **Hetzner Storage
+  Box**. That must be reproduced on archivum *and verified* before TrueNAS is
+  shut down.
+- **fabricum** is itself a Proxmox VM and does not survive in its current form
+  (Phase 6).
+- **External access stays on the Cloudflare tunnel.** quaesitum is a small
+  Hetzner VM doing search; it is not a reverse-proxy candidate.
+- **Alerting lives on quaesitum**, not archivum (2026-08-03). It is the one
+  service this migration *adds* to that host, and it goes there because an alert
+  channel hosted on the machine it monitors cannot report that machine being
+  down. Separate power, separate uplink, separate failure domain.
+- **One shared PostgreSQL instance** on archivum, as today, with per-app
+  databases and roles over the unix socket.
+- The video-through-a-tunnel question is closed: owncast serves its segments
+  from **R2**, so only the HTML/API layer crosses the tunnel, and jellyfin is
+  LAN-only.
+
+## Inventory
+
+| VM | Contents | Target | Module in nixpkgs 26.05 |
+| --- | --- | --- | --- |
+| UniFi controller | Ubiquiti network controller | archivum | **UniFi OS Server** via `github:rcambrj/unifi-os-server` (podman) — see Phase 5 |
+| Docker VM | qbittorrent, cloudflared, homepage, openspeedtest, immich, speedtest-tracker, prowlarr, gotosocial | archivum | all but openspeedtest have modules — see below |
+| TrueNAS | file storage + Hetzner Storage Box backups | archivum `tank` | native ZFS + `services.restic` |
+| Owncast | live streaming | archivum | `services.owncast` (0.2.5) |
+| Jellyfin | media server | archivum (**already running there**) | `services.jellyfin` (10.11.11) |
+| PostgreSQL | all databases | archivum | `services.postgresql` (17.10) |
+| Minecraft | idle, nobody plays | **delete** | `services.minecraft-server` if ever revived |
+| fabricum | dev/general | Phase 6 decision | — |
+
+Two duplicates fall out of this: **qbittorrent** and **jellyfin** already run on
+archivum. Neither needs migrating as a service — only their state does, and only
+if you care about seeding history and watch progress.
+
+`hosts/ubiqium/` is a planned NixOS VM (`services.qemuGuest.enable = true`,
+disko config) that was meant to replace the UniFi VM on Proxmox. With Proxmox
+going away it has no hypervisor, so unifi should move into archivum and ubiqium
+should be retired from `flake.nix` — unless you want it as a microvm for
+isolation.
+
+## Dependency order
+
+```
+restic → Hetzner            ─┐
+PostgreSQL on archivum      ─┼─→ immich, gotosocial, speedtest-tracker
+cloudflared (external)      ─┘        │
+TrueNAS data → tank ───────────────→ jellyfin cutover, samba/nfs clients
+```
+
+Postgres and external access gate the interesting services, so they come first
+even though nothing user-visible changes when they land.
+
+## Guiding rules
+
+1. **Backups first.** Nothing is decommissioned until archivum's offsite backup
+   runs green *and* a restore has been tested.
+2. **One service per change**, each its own commit in `hosts/archivum/services/`.
+   The auto-import in `services/default.nix` picks up new files automatically.
+3. **Both sides run in parallel** through a soak period. Migrate by pointing
+   clients at archivum, not by deleting the source.
+4. **The Proxmox host stays powered off but intact** for a grace period after
+   the last cutover — that is the rollback plan.
+5. Every migrated service gets an uptime-kuma check *before* its source stops.
+6. **Match versions before moving state.** Every app-with-a-database below can
+   restore a dump from an older version into a newer app, but never the reverse.
+   Check the container's current version against the nixpkgs version in the
+   table above *before* dumping.
+
+## Phase 0 — Baseline
+
+- [x] Wall-meter the Proxmox host and archivum, so the win is quantified.
+- [x] RAM: archivum has **64 GB**, the Postgres VM runs in 4 GB. No hardware
+      bump needed — see the resource budget in Phase 2.
+- [ ] For each service: current version, ports, DNS names, and which clients
+      (phones, TVs, scripts) point at it.
+- [ ] Note any USB passthrough in use (Zigbee/Z-Wave/UPS dongles).
+
+## Phase 1 — Foundations on archivum
+
+Written and evaluating as of 2026-08-03, in `hosts/archivum/services/`. Every
+piece that needs a credential is **inert until the secret exists** and warns on
+every rebuild until then, so a half-finished Phase 1 cannot look finished. Setup
+commands for each live in `hosts/archivum/README.md`.
+
+- [x] **Backups.** `services/restic.nix` — `/var/lib`, `/home` and
+      `/mnt/tank/nox` to the Storage Box nightly at 02:15, 14 daily / 8 weekly /
+      12 monthly / 3 yearly, `--exclude-caches` plus explicit excludes for
+      jellyfin metadata, clamav signatures and netdata. Media is deliberately
+      absent — re-downloadable, and 14 TB does not fit.
+
+      The Storage Box only offers **password auth**, so the sftp connection goes
+      through `sshpass` rather than a key. Needs
+      `secrets/storagebox-{target,password,restic-password}` — note that the
+      login password and the restic repository password are two different
+      things.
+
+      A monthly `restic check --read-data-subset=5%` runs on its own timer
+      rather than after every backup: over sftp a full structural check every
+      night costs a lot and proves little.
+- [x] **Snapshots.** `services/sanoid.nix` — hourly, with three retention
+      templates: `rpool/{root,var}` and `tank/nox`, `rpool/home` longer,
+      `tank/media` short. `rpool/nix` and `tank/incomplete` excluded as
+      rebuildable and scratch respectively.
+- [ ] **Restore test.** Pull one dataset back from Hetzner and diff it. Until
+      this passes, TrueNAS is still the system of record. Procedure is in
+      `hosts/archivum/README.md`; also open the repository from a machine that
+      is *not* archivum, since a backup only one host can read dies with it.
+- [x] **Update policy — unchanged.** `auto-updates.nix` keeps rebuilding at
+      04:40 and rebooting on kernel changes. A reboot while everyone is asleep
+      is not the problem worth solving.
+
+      Most breakage never gets that far: eval and build failures stop at
+      `nixos-rebuild boot`, nothing activates, and the old generation keeps
+      running.
+
+      There is also four years of precedent — the Docker VM auto-updates every
+      container, including immich and gotosocial, with zero incidents. NixOS
+      updates are the more conservative arrangement of the two: they arrive only
+      when a `flake.lock` bump is committed, off a pinned stable branch, with
+      atomic activation and a bootable previous generation. Treat unattended
+      updates as a settled question, not a migration risk.
+- [x] **Log persistence.** `services/journald.nix` — `storage = "persistent"`
+      overriding `hosts/common`, 2 GB cap, one month retention. A 04:40 failure
+      no longer erases its own evidence before you wake up.
+- [x] **Alerting.** `services/notifications.nix` — one `notify-mail` command
+      that restic failures, smartd warnings and ZED events (scrubs, resilvers,
+      checksum errors, degraded pools) all funnel into. It always writes to the
+      journal, and pushes to ntfy when `secrets/ntfy-{url,token}` exist.
+
+      `ZED_NOTIFY_VERBOSE` is on, so *clean* scrubs report too — that is what
+      makes a silent month mean something rather than nothing. Attach any future
+      unit with `onFailure = [ "notify-failure@%n.service" ]`.
+- [x] **ntfy on quaesitum.** `hosts/quaesitum/services/ntfy.nix` —
+      `https://ntfy.nox.onl` behind the nginx already on that box,
+      `auth-default-access = deny-all`, users/ACLs/tokens provisioned
+      declaratively from `hosts/quaesitum/secrets/ntfy.env` (the sqlite user db
+      becomes a cache, not the source of truth).
+
+      archivum gets a **write-only** token on the `alerts` topic — it publishes
+      and cannot read back. Each future publisher gets its own line, so revoking
+      one costs a line instead of a fleet-wide rotation.
+
+      Needs an A/AAAA record for `ntfy.nox.onl` before the first rebuild:
+      quaesitum issues certs over HTTP-01, so ACME fails while the name does not
+      resolve.
+- [x] **Reverse proxy + internal names.** `services/nginx.nix` — one DNS-01
+      wildcard for `*.nox.onl` via Cloudflare, a default vhost that returns 444,
+      and `kuma.nox.onl` as the first tenant. Inert until
+      `secrets/acme-cloudflare.env` holds a `Zone:DNS:Edit` token.
+
+      Each name needs a DNS record pointing at `10.201.3.229`. A public A record
+      for a private address is fine and avoids running split-horizon DNS.
+- [ ] **UPS** (optional): `power.ups`. Not written — needs to know which UPS and
+      whether it is USB-attached.
+
+## Phase 2 — Shared infrastructure
+
+- [ ] **PostgreSQL.** `services.postgresql` on archivum. Check the VM's major
+      version first: dump with the *target* version's `pg_dumpall` (17.x) to
+      avoid cross-version restore problems. Per-app databases via
+      `ensureDatabases`/`ensureUsers`, unix-socket auth where possible so no
+      passwords are needed.
+**One shared instance**, mirroring the single Postgres VM you run today. Wiring
+per service, all over the `/run/postgresql` unix socket so no passwords are
+needed:
+
+| Service | How |
+| --- | --- |
+| immich | `services.immich.database.enable = true` — also pulls in the vectorchord/pgvector extensions the shared instance needs |
+| gotosocial | `services.gotosocial.setupPostgresqlDB = true` — sets `db-type`, points `db-address` at the socket, creates DB and role |
+| speedtest-tracker | No `createLocally` equivalent; needs hand-written `ensureDatabases`/`ensureUsers` and `DB_CONNECTION = "pgsql"`. Honestly, SQLite is fine here — it is speedtest history, and it saves the wiring |
+
+Accept the tradeoff knowingly: a shared instance means major-version upgrades
+are all-or-nothing for every app at once. In exchange, one `pg_dumpall` in
+restic covers everything. NixOS pins the Postgres major to `system.stateVersion`,
+so a nixpkgs bump will not move it under you — the upgrade happens when you
+choose it.
+- [ ] **cloudflared.** `services.cloudflared` (2026.5.2) with the tunnel
+      credentials JSON under `secrets/`. Declarative ingress rules replace the
+      container's config.
+
+### Tunnel ingress
+
+Current state, and what each becomes:
+
+| Hostname | Service | Plan |
+| --- | --- | --- |
+| `social.nox.onl` | gotosocial | Keep. The cutover moment for Phase 5 |
+| `party.nox.onl` | owncast | Keep. Segments come from R2, so only HTML/API crosses the tunnel |
+| `jelly.nox.onl` | jellyfin | Either way — one click in the Cloudflare dashboard to drop or repoint. Decide at cutover, not now. LAN-only in practice |
+| `tlapbot.nox.onl` | owncast bot (python) | Retired, not running. Do not recreate; if it comes back it is a new service, not a migration item |
+
+So the tunnel that has to work on day one carries exactly two hostnames.
+
+**Use a second tunnel rather than moving the existing one.** Create a new tunnel
+on archivum with its own credentials, and cut over one hostname at a time by
+repointing that hostname's CNAME to `<new-tunnel-uuid>.cfargotunnel.com`.
+Rollback is then a DNS change rather than a config restore, and the old tunnel
+keeps serving whatever has not moved yet. Delete the old tunnel once both
+hostnames have moved and soaked.
+
+Do not run the *same* tunnel from two machines during the migration — Cloudflare
+treats that as replicas and load-balances between them, which would send half
+your requests to whichever box does not have the service yet.
+
+- [ ] Create the archivum tunnel, credentials JSON into `secrets/`.
+- [ ] `jelly.nox.onl`: drop or repoint at cutover time, whichever you feel like.
+- [ ] Cut over `party.nox.onl` first — owncast is the low-stakes one, and it
+      proves the tunnel works end to end.
+- [ ] `social.nox.onl` moves as part of the gotosocial procedure in Phase 5,
+      not before.
+
+### Resource budget (64 GB)
+
+Capacity is not the constraint; *double caching* is the only thing worth
+tuning. On ZFS, ARC and Postgres' `shared_buffers` cache the same blocks twice,
+so the fix is to keep Postgres modest rather than generous:
+
+| Consumer | Suggested | Note |
+| --- | --- | --- |
+| ZFS ARC | cap ~16–24 GB (`boot.kernelParams` / `zfs_arc_max`) | Linux default is 50 % of RAM = 32 GB, which is more than this workload needs |
+| PostgreSQL | `shared_buffers` 2–4 GB | The whole VM lives in 4 GB today; a huge value would fight ARC, not help |
+| immich (server + ML) | ~4 GB | ML jobs spike during initial import, then idle |
+| UniFi OS Server (podman, bundles its own mongo) | ~4–8 GB | Ubiquiti's stated sizing; grows with retention |
+| jellyfin | ~1–2 GB | VAAPI transcode, not CPU |
+| Everything else + slack | remainder | Comfortable |
+
+Placement matters more than sizing: keep `/var/lib/postgresql` on the NVMe
+`rpool` (it already is, via `rpool/var`) and *not* on spinning `tank`. Immich
+is the opposite — DB on `rpool`, the upload library on `tank`.
+
+If you want the last few percent, a dedicated dataset for Postgres with
+`recordsize=16K` and `atime=off` matches its page size, and `full_page_writes`
+can safely be turned off on ZFS since CoW makes torn pages impossible. Both are
+optimisations, not prerequisites.
+
+## Phase 3 — TrueNAS data
+
+Both ends are ZFS, so this is `zfs send | zfs recv`, not rsync.
+
+### 3a — Rebuild `tank` as raidz1 first
+
+`tank` is currently a **3× 14 TB stripe — zero redundancy** (confirmed
+2026-07-30; the creation command in `hosts/archivum/README.md` has no `raidz1`
+vdev keyword). Any single disk failure loses the whole pool. This must be fixed
+*before* TrueNAS data lands on it, because a stripe→raidz1 conversion is a
+**destroy-and-recreate** — ZFS raidz expansion (2.4.3, in this nixpkgs) can add
+a disk to an existing raidz vdev, but cannot convert a stripe into one.
+
+The rebuild is cheap right now: everything on `tank` today is a copy of data
+that exists in two other locations (confirmed 2026-07-30), so there is nothing
+to evacuate and no Phase 1 dependency — this can happen immediately, and gets
+strictly more expensive the longer it waits.
+
+- [x] Sanity-check that nothing new landed: `zfs list -o space -r tank`, eyeball
+      `tank/nox`.
+- [x] Stop writers (qbittorrent, samba/nfs clients, jellyfin scans).
+- [x] `zpool destroy tank`, then recreate with the same options **plus raidz1**
+      (corrected command is in `hosts/archivum/README.md`).
+- [x] Recreate the datasets (`tank/root`, `tank/media`, `tank/nox`,
+      `tank/incomplete`), restart writers, re-copy or re-download at leisure.
+- [x] Verify with `zpool status tank` — the vdev must read `raidz1-0`.
+- [x] Update `hosts/archivum/README.md`: make the raidz1 command the canonical
+      one and drop the stripe warning.
+
+Post-rebuild capacity is ≈ 25 TiB usable (down from ≈ 38 TiB) — check incoming
+TrueNAS data fits with headroom before Phase 3b. One disk of parity still means
+a resilver at 14 TB capacity runs for many hours under full load — the window
+where a second failure is fatal — which is why the Phase 1 offsite backup still
+precedes the *data migration*, even though it no longer gates the rebuild. If
+you later want more capacity, raidz expansion makes adding a fourth disk a
+non-destructive operation.
+
+### 3b — Data migration
+
+- [ ] Inventory datasets: names, sizes, snapshot layout, active writers.
+- [ ] Confirm `tank` headroom alongside existing media (snapshots hold space
+      too).
+- [ ] Seed with `zfs send -R` of a base snapshot while TrueNAS stays live.
+- [ ] Incremental `zfs send -i` passes until the delta is small.
+- [ ] Final pass with writers stopped, then flip clients to archivum's
+      samba/nfs shares.
+- [ ] Reconcile permissions: archivum's `media` share is deliberately
+      guest-writable. Anything arriving with stricter ACLs needs an explicit
+      decision rather than silently inheriting that.
+- [ ] Repoint the Hetzner backup source to archivum; run both for one cycle
+      before disabling the TrueNAS job.
+
+## Phase 4 — Quick wins (no dependencies)
+
+Low risk, builds confidence, shrinks the Docker VM.
+
+- [ ] **Minecraft** — delete. Archive the world dir somewhere cheap first;
+      rebuild with `services.minecraft-server` if anyone ever asks.
+- [ ] **openspeedtest** — the one service with no module. `oci-containers`
+      podman container, commented as temporary.
+- [ ] **speedtest-tracker** — `services.speedtest-tracker`. Needs an `APP_KEY`
+      secret; can use the shared Postgres or its own SQLite.
+- [ ] **prowlarr** — `services.prowlarr`. Stop the container, copy its config
+      dir (SQLite) into `/var/lib/prowlarr`, start. Verify indexers still
+      resolve. Note it currently has no *arr apps downstream.
+- [ ] **owncast** — `services.owncast`. Occasional use and no VODs, so a fresh
+      install is fine: stand it up, re-enter the stream key and the R2 settings
+      (endpoint, bucket, access key, secret) in the admin UI. Copying the old
+      data dir is optional convenience, not a requirement. Jot the R2 settings
+      down before the VM goes away so you are not hunting for them afterwards.
+- [ ] **homepage vs glance** — you would be running two dashboards.
+      `services.homepage-dashboard` (1.12.3) exists if homepage wins; otherwise
+      port the tiles into the existing glance config and drop homepage.
+- [ ] **qbittorrent** — do *not* migrate the container; archivum's native
+      instance is VPN-confined and already points at `/mnt/tank/media`. To keep
+      seeding, copy `BT_backup/` from the container's state into
+      `/var/lib/qbittorrent` while stopped. Otherwise just stop the container.
+
+## Phase 5 — Heavy / stateful
+
+One at a time, each stop → dump → restore → verify → soak.
+
+- [ ] **immich** — the highest-risk item. `services.immich` (2.7.5) with
+      `database.enable`. Steps: align the container to the same immich version
+      first, stop it, `pg_dump` the immich DB, copy `UPLOAD_LOCATION` to a
+      dataset on `tank`, restore, then let it re-run ML jobs. The library files
+      are the irreplaceable part; the DB can be rebuilt from them at some cost,
+      the reverse is not true. Add it to restic before first use.
+- [ ] **gotosocial** — see the dedicated procedure below.
+- [ ] **jellyfin** — already running on archivum, so this is a state merge, not
+      an install. Decide whether the VM's watch history and metadata matter. If
+      yes: stop both, copy `/var/lib/jellyfin` from the VM (config, DB, metadata)
+      onto archivum, and make sure library paths resolve to `/mnt/tank/media`
+      post-Phase-3. Version check: archivum imports the *unstable* jellyfin
+      module; do not restore a newer library DB into an older server.
+- [ ] **unifi → UniFi OS Server** — see the dedicated procedure below.
+      `hosts/ubiqium/services/unifi.nix` is not carried over; ubiqium retires
+      with the hypervisor.
+
+### unifi: straight to UniFi OS Server
+
+Status as of July 2026: Ubiquiti has **deprecated the standalone UniFi Network
+Application** and points self-hosters at **UniFi OS Server**. The standalone app
+is in maintenance mode — security and bug fixes, no new features; Organizations,
+Site Magic, Teleport and Identity are UniFi-OS-only.
+
+Decision: **go straight to UOS Server** via `github:rcambrj/unifi-os-server`,
+rather than migrating to the deprecated `services.unifi` and again later. One
+migration instead of two, onto the platform Ubiquiti actually develops. SSO
+account already exists, so that dependency is not a blocker.
+
+Accepted with open eyes: the flake self-describes as *"Current state: unstable"*,
+is not affiliated with Ubiquiti, runs UOS Server in **podman containers**, and
+auto-updates weekly. This is the one permanent podman service on archivum — the
+standing "podman only as a temporary fallback" preference does not apply here,
+because there is no native alternative that is not deprecated.
+
+Sizing is a non-issue: UOS Server wants ~4 vCPU / 4–8 GB RAM / 40 GB SSD.
+
+#### Networking: single-homed on VLAN 201
+
+archivum is `10.201.3.229` on VLAN 201; the management network is VLAN 99
+(`10.99.0.0/24`) and the old controller was `10.99.0.16`. archivum's switch port
+has access to VLAN 99, but **we are not using it** — no tagged VLAN leg, no
+second IP. The controller runs on archivum's existing address.
+
+Rationale: the only thing a VLAN 99 leg bought was preserving `10.99.0.16` so
+devices would not need re-pointing. With **two APs**, re-pointing is two SSH
+commands. That is not worth dual-homing the server, the per-interface firewall
+discipline it forces, or the `ip_forward` segmentation question it raises.
+
+The module runs **one privileged podman container** (systemd inside) with
+published port mappings. `uosSystemIP` is written into `system.properties` as
+`system_ip` — the inform address handed to devices — so it must be archivum's
+real LAN IP, never the `127.0.0.1` default.
+
+```nix
+services.unifi-os-server = {
+  enable = true;
+  uosSystemIP = "10.201.3.229";
+  openFirewallUiPort = true;
+  openFirewallServicePorts = true;
+  # port defaults are fine: UI 11443, inform 8080, controller 8443,
+  # speedtest 6789, captive portal 8880/8843, STUN 3478/udp, discovery 10001/udp
+};
+```
+
+Consequences to handle:
+
+- **The APs live on VLAN 99 and the controller now lives on VLAN 201**, so allow
+  VLAN 99 → `10.201.3.229` on tcp 8080 and 8443, plus udp 3478, at the gateway.
+  Without that the APs simply never check in.
+- **Point each AP at the new controller once**: `ssh ubnt@<ap-ip>` then
+  `set-inform http://10.201.3.229:8080/inform`. Two devices, one time.
+- **Broadcast discovery is irrelevant here** — it would not cross VLANs anyway,
+  container or not. New devices get the same `set-inform` treatment, or adopt
+  via the mobile app.
+
+Prerequisites:
+
+- [ ] Add the flake input, wire its module into archivum in `flake.nix`.
+- [ ] Enable podman and `virtualisation.oci-containers.backend = "podman"` —
+      the module asserts both. Note `hosts/unused/services/docker.nix` is
+      *docker*; do not adopt it, write the podman config fresh.
+
+Cutover:
+
+- [ ] **Take a `.unf` backup from the current controller and keep it forever.**
+      Settings → System → Backups. This is the universal rollback artifact: it
+      restores into UOS Server *or* into a classic controller, so it is the
+      escape hatch if the flake turns out to be too unstable to live with.
+- [ ] Stand up UOS Server on archivum, complete the setup wizard, install the
+      Network application inside it.
+- [ ] Restore the `.unf` under Settings → System → Backups → Upload Backup.
+- [ ] Open VLAN 99 → `10.201.3.229` (tcp 8080/8443, udp 3478) at the gateway.
+- [ ] `set-inform` both APs at the new address; they appear in the restored
+      controller within a minute or two.
+- [ ] Old controller VM can be shut down once both APs are checking in.
+- [ ] Expect a short window where the network is unmanaged. APs keep forwarding
+      traffic throughout; you lose visibility and config changes, not the
+      network.
+- [ ] Add UOS Server's state to restic once it is up.
+
+Fallback if it does not work out: `services.unifi` (unifi 10.2.105 in nixpkgs,
+two maintainers, a NixOS VM test) still exists and the preserved `.unf` restores
+into it. Note the version rule — a backup restores into an equal or newer
+version, never older — so keep the *pre-migration* backup rather than relying on
+one taken after UOS has upgraded the Network app.
+
+### gotosocial in detail
+
+The one service where the database *is* the thing being migrated. Media files
+can be re-fetched or lived without; the DB holds the instance's identity — the
+actor keypair remote servers have cached, every follow relationship in both
+directions, and the delivery queue. Restore it wrong and the instance cannot
+prove it is itself.
+
+**This service is an exception to guiding rule 3: never run both copies at
+once.** Two servers answering for the same domain will both consume the inbox,
+both sign deliveries, and diverge — with no clean way to merge them afterwards.
+It is stop-old → migrate → start-new, in that order, with the old one kept
+*stopped but intact* as the rollback.
+
+Preparation:
+
+- [ ] Record the running container's exact GtS version. Migrations run forward
+      on startup, so older → 0.21.3 is fine; **newer → 0.21.3 is not**. If the
+      container is ahead of nixpkgs, pin `services.gotosocial.package` to match
+      before migrating and upgrade afterwards as a separate step.
+- [ ] Check the storage backend: local disk or S3/R2 (you already use R2 for
+      owncast). If it is R2, media does not move at all — only credentials and
+      bucket config carry over, which makes this considerably easier.
+- [ ] Transcribe the live `config.yaml` into `services.gotosocial.settings`.
+      `host` must stay byte-identical; also carry over `account-domain` if a
+      split-domain setup is in use, plus `protocol`, storage and db settings.
+      The `host` value is not a configuration preference — it is the instance's
+      name in every remote database that knows about you.
+- [ ] Decide the DB password path under `secrets/`, or use unix-socket auth
+      against the shared Postgres.
+
+Cutover:
+
+- [ ] Announce or accept a short outage — pick a quiet window, and keep it
+      short enough that remote retry queues cover it.
+- [ ] Stop the container. Leave it stopped for the rest of the procedure.
+- [ ] `pg_dump` the gotosocial DB with the target version's client (17.x).
+- [ ] Copy media if local: `storage-local-base-path` onto a `tank` dataset,
+      preserving ownership; it grows without bound, so it does not belong on
+      `rpool`.
+- [ ] Restore the dump into the shared Postgres, start gotosocial, watch the
+      first-run migration log complete before touching anything else.
+- [ ] Repoint `social.nox.onl`'s CNAME at the archivum tunnel. This is the
+      cutover moment — it is a DNS change, so it is also the rollback.
+
+Verification — do all of these before declaring it done:
+
+- [ ] `/.well-known/webfinger?resource=acct:<user>@<domain>` resolves.
+- [ ] The instance actor fetches cleanly (`curl -H 'Accept: application/activity+json' https://<domain>/users/<user>`).
+- [ ] A post from your account appears on a remote instance you follow — this
+      is the real test that the signing key survived.
+- [ ] An interaction *from* a remote account arrives in your inbox.
+- [ ] Avatars, headers and media attachments load (proves storage config).
+- [ ] Old posts still render their attachments, not just new ones.
+- [ ] Add the DB and media to restic before the soak period, not after.
+
+Only once all of that passes should the old container be deleted rather than
+merely stopped.
+
+## Phase 6 — fabricum's fate
+
+fabricum is a Proxmox VM, so retiring the host retires it. Options, in my order
+of preference:
+
+1. **Fold its role into archivum** — one fewer machine; costs the separation
+   between "server" and "place I break things".
+2. **microvm.nix or nixos-container on archivum** — keeps isolation and the
+   `flake.nix` entry, adds machinery.
+3. **Move to existing hardware** (desktop/laptop/mini PC) — keeps a real dev
+   box, costs whatever it draws.
+
+Whichever wins: `flake.nix`, `hosts/fabricum/` and the auto-update service need
+updating, and the repo checkout that auto-updates pull from currently lives at
+`/home/nox/etc/nixos` on fabricum.
+
+## Phase 7 — Decommission
+
+- [ ] Final backup + snapshot of every VM disk image, archived off the Proxmox
+      host.
+- [ ] Power off Proxmox, leave disks intact for 4–6 weeks of archivum running
+      everything.
+- [ ] Re-measure power draw against the Phase 0 baseline.
+- [ ] Prune the repo: `hosts/unused/`, `hosts/ubiqium/` (if retired),
+      dead `flake.nix` entries.
+- [ ] Update `CLAUDE.md` — it still claims four active hosts and nixpkgs/state
+      version 25.11, while `flake.nix` tracks nixos-26.05.
+
+## Risks
+
+| Risk | Mitigation |
+| --- | --- |
+| Backup gap between TrueNAS shutdown and archivum's job working | Phase 1 backup + restore test precedes Phase 3; overlap one cycle |
+| **`tank` is currently a stripe — zero redundancy until the Phase 3a rebuild** | Rebuild as raidz1 immediately (Phase 3a) — nothing on it is a sole copy today, so the rebuild is free; it stops being free once TrueNAS data lands |
+| Everything then on one box with one raidz1 pool — one disk of parity, long resilver window on 14 TB drives | Offsite restic before Phase 3, ZFS snapshots, tested restores, smartd alerts wired up, UPS |
+| immich DB/library mismatch or version skew | Align versions before dumping; library files are the source of truth |
+| gotosocial domain or identity change | Domain is immutable in practice — keep it byte-identical |
+| UniFi OS Server flake is third-party and self-described as unstable, and sits in the nightly auto-update path | Preserve the pre-migration `.unf` as a universal rollback; `services.unifi` remains a working fallback. A flake update that fails to build stops before activation |
+| `tank` fills during data migration | Check headroom before the first send |
+| ZFS ARC and Postgres `shared_buffers` double-caching the same blocks | Cap `zfs_arc_max`, keep `shared_buffers` small — see the Phase 2 budget |
+| `secrets/*` are read into the world-readable nix store — now including the Storage Box password, since Hetzner offers no key auth | Existing behaviour, not a regression; the subaccount is scoped to its own directory, and restic's own encryption is what actually protects the backup. sops-nix fixes it properly later |
+
+## Open questions
+
+- Keep glance, homepage, or something else? (Undecided — homepage is my
+  recommendation, but nothing is written yet.)
