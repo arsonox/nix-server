@@ -27,6 +27,8 @@ After setting up the system, set up samba login with `sudo smbpasswd -a nox`.
 
 
 # run the first backup by hand
+
+```bash
 sudo nixos-rebuild switch --flake .#archivum
 sudo systemctl start restic-backups-storagebox.service
 journalctl -fu restic-backups-storagebox.service
