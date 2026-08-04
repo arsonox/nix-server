@@ -163,8 +163,6 @@ commands for each live in `hosts/archivum/README.md`.
 
       Each name needs a DNS record pointing at `10.201.3.229`. A public A record
       for a private address is fine and avoids running split-horizon DNS.
-- [ ] **UPS** (optional): `power.ups`. Not written — needs to know which UPS and
-      whether it is USB-attached.
 
 ## Phase 2 — Shared infrastructure
 
