@@ -114,7 +114,7 @@ commands for each live in `hosts/archivum/README.md`.
       templates: `rpool/{root,var}` and `tank/nox`, `rpool/home` longer,
       `tank/media` short. `rpool/nix` and `tank/incomplete` excluded as
       rebuildable and scratch respectively.
-- [ ] **Restore test.** Pull one dataset back from Hetzner and diff it. Until
+- [x] **Restore test.** Pull one dataset back from Hetzner and diff it. Until
       this passes, TrueNAS is still the system of record. Procedure is in
       `hosts/archivum/README.md`; also open the repository from a machine that
       is *not* archivum, since a backup only one host can read dies with it.
