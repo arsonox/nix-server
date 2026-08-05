@@ -20,11 +20,12 @@ in
   warnings = lib.optional (!configured) ''
     archivum syncs no photos: hosts/archivum/secrets/syncthing-iphone-id does
     not exist, so syncthing runs with no devices and no folders. Pair the phone
-    in the GUI at http://10.201.3.229:8384, then write its device ID to that
+    in the GUI at https://syncthing.nox.onl, then write its device ID to that
     file — see hosts/archivum/README.md.
   ''
   ++ lib.optional (!hasPassword) ''
-    Syncthing has no password. Anyone on the LAN can add folders and devices until it does.
+    Syncthing has no password. Anyone who can reach https://syncthing.nox.onl
+    can add folders and devices until it does.
   '';
 
   services.syncthing = {
@@ -39,7 +40,11 @@ in
 
     settings = {
       options.urAccepted = -1; # no usage reporting
-      gui.user = "nox";
+
+      gui = {
+        user = "nox";
+        insecureSkipHostcheck = true;
+      };
 
       devices = lib.mkIf configured {
         iphone.id = deviceId;
@@ -62,10 +67,6 @@ in
       };
     };
   };
-
-  # GUI on the LAN, not loopback. Plain HTTP, so the password crosses the LAN
-  # in clear — acceptable here by choice.
-  networking.firewall.allowedTCPPorts = [ 8384 ];
 
   users.groups.photos.members = [ "nox" ];
 
