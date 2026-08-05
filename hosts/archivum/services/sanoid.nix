@@ -27,6 +27,16 @@
         autosnap = true;
         autoprune = true;
       };
+      # Photos are the irreplaceable set — everything else on tank exists
+      # somewhere else or can be re-downloaded — so they keep the longest tail.
+      photos = {
+        hourly = 12;
+        daily = 30;
+        monthly = 12;
+        yearly = 3;
+        autosnap = true;
+        autoprune = true;
+      };
     };
 
     datasets = {
@@ -35,6 +45,7 @@
       "rpool/home".useTemplate = [ "data" ];
       "tank/nox".useTemplate = [ "data" ];
       "tank/media".useTemplate = [ "media" ];
+      "tank/photos".useTemplate = [ "photos" ];
     };
   };
 

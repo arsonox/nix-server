@@ -50,6 +50,7 @@ in
         "/var/lib"
         "/home"
         "/mnt/tank/nox"
+        "/mnt/tank/photos"
       ];
 
       exclude = [

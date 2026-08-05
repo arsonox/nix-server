@@ -61,6 +61,15 @@ in
         proxyWebsockets = true;
       };
     };
+
+    virtualHosts."syncthing.nox.onl" = {
+      useACMEHost = "nox.onl";
+      forceSSL = true;
+      locations."/" = {
+        proxyPass = "http://127.0.0.1:8384";
+        proxyWebsockets = true;
+      };
+    };
   };
 
   networking.firewall.allowedTCPPorts = lib.mkIf configured [

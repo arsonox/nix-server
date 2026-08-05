@@ -17,6 +17,7 @@ zfs create tank/root
 zfs create tank/media
 zfs create tank/nox
 zfs create tank/incomplete
+zfs create tank/photos
 ```
 
 ## Samba
@@ -45,11 +46,47 @@ sudo diff -r /mnt/tank/nox /mnt/tank/restore-test/mnt/tank/nox && echo "restore 
 sudo rm -rf /mnt/tank/restore-test
 ```
 
+## Photos (syncthing)
+
+`services/syncthing.nix` pulls the phone's camera roll into
+`/mnt/tank/photos/iphone` and exposes it as a **read-only** samba share. It
+replaces immich: see the decision note in `MIGRATION.md`.
+
+### GUI password
+
+```bash
+echo -n 'the password' > hosts/archivum/secrets/syncthing-gui-password
+git add hosts/archivum/secrets/syncthing-gui-password
+sudo nixos-rebuild switch --flake .#archivum
+```
+
+
+### Pairing the phone
+
+On the phone, install SyncTrain (free) or Möbius Sync (paid), add archivum as a
+device, and share the camera roll folder **as send-only**.
+
+After pairing:
+
+```bash
+echo "AAAAAAA-BBBBBBB-..." > hosts/archivum/secrets/syncthing-iphone-id
+git add hosts/archivum/secrets/syncthing-iphone-id   # flakes ignore untracked files
+sudo nixos-rebuild switch --flake .#archivum
+```
+
+A device ID is a public key fingerprint, not a secret. It lives under
+`secrets/` only because that is where this repo keeps gated files.
+
+`overrideDevices`/`overrideFolders` are on, so anything added through the GUI is
+removed on the next restart.
+
+
 ## Snapshots
 
-`services/sanoid.nix` snapshots `rpool/{root,var,home}`, `tank/nox` and
-`tank/media` hourly, and prunes automatically. `rpool/nix` and
+`services/sanoid.nix` snapshots `rpool/{root,var,home}`, `tank/nox`,
+`tank/photos` and `tank/media` hourly, and prunes automatically. `rpool/nix` and
 `tank/incomplete` are deliberately excluded.
+`tank/photos` keeps the longest tail (30 daily / 12 monthly / 3 yearly)
 
 ```bash
 zfs list -t snapshot -o name,used,creation -s creation | tail
@@ -60,9 +97,8 @@ zfs rollback tank/nox@autosnap_2026-08-03_12:00:00_hourly   # the undo button
 
 `services/notifications.nix` funnels restic failures, smartd warnings and ZFS
 events (scrubs, resilvers, checksum errors, pool degradation) into one
-`notify-mail` command. It always writes to the journal, which survives reboots
-now, see `services/journald.nix`, and additionally pushes to the ntfy server on
-**quaesitum**
+`notify-mail` command. It always writes to the journal, and additionally pushes 
+to the ntfy server on **quaesitum**
 
 Attach it to any future unit with `onFailure = [ "notify-failure@%n.service" ]`.
 
