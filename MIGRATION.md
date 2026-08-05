@@ -9,8 +9,11 @@ Decisions taken (2026-07-29):
   is an accepted *temporary* fallback where no module exists. Two permanent
   exceptions: openspeedtest (no module anywhere) and UniFi OS Server (the only
   non-deprecated option is a third-party flake running podman).
-- Secrets stay as they are (git-crypt over `secrets/**`); sops-nix is a possible
-  later step, not a blocker.
+- Secrets start as git-crypt over `secrets/**`, and **move to sops-nix in Phase
+  2** (2026-08-05). It is not a blocker for anything, but it is no longer just a
+  "possible later step": git-crypt leaves every secret world-readable in the nix
+  store, and that is the wrong state to hand a machine that is about to become
+  the only copy of things.
 - Offsite backups currently run from the **TrueNAS VM** to a **Hetzner Storage
   Box**. That must be reproduced on archivum *and verified* before TrueNAS is
   shut down.
@@ -24,6 +27,17 @@ Decisions taken (2026-07-29):
   down. Separate power, separate uplink, separate failure domain.
 - **One shared PostgreSQL instance** on archivum, as today, with per-app
   databases and roles over the unix socket.
+- **immich is dropped, not migrated** (2026-08-04). It cannot be pinned: the
+  mobile app enforces server/app version compatibility and updates on the App
+  Store's schedule, so a third party would be choosing when archivum runs an
+  irreversible database migration. Nothing else here has that property.
+
+  Replaced by **syncthing** into `tank/photos` plus a read-only samba share —
+  see Phase 4. This deletes the highest-risk item of the whole migration, drops
+  the pgvector/vectorchord requirement from the shared Postgres, and frees ~4 GB
+  of RAM. What is genuinely lost is face recognition and semantic search;
+  PhotoPrism can be pointed at the same directory later if they are missed,
+  without ever gating the phone on a server version.
 - The video-through-a-tunnel question is closed: owncast serves its segments
   from **R2**, so only the HTML/API layer crosses the tunnel, and jellyfin is
   LAN-only.
@@ -33,7 +47,7 @@ Decisions taken (2026-07-29):
 | VM | Contents | Target | Module in nixpkgs 26.05 |
 | --- | --- | --- | --- |
 | UniFi controller | Ubiquiti network controller | archivum | **UniFi OS Server** via `github:rcambrj/unifi-os-server` (podman) — see Phase 5 |
-| Docker VM | qbittorrent, cloudflared, homepage, openspeedtest, immich, speedtest-tracker, prowlarr, gotosocial | archivum | all but openspeedtest have modules — see below |
+| Docker VM | qbittorrent, cloudflared, homepage, openspeedtest, speedtest-tracker, prowlarr, gotosocial | archivum | all but openspeedtest have modules — see below. **immich is dropped, not migrated** |
 | TrueNAS | file storage + Hetzner Storage Box backups | archivum `tank` | native ZFS + `services.restic` |
 | Owncast | live streaming | archivum | `services.owncast` (0.2.5) |
 | Jellyfin | media server | archivum (**already running there**) | `services.jellyfin` (10.11.11) |
@@ -55,7 +69,7 @@ isolation.
 
 ```
 restic → Hetzner            ─┐
-PostgreSQL on archivum      ─┼─→ immich, gotosocial, speedtest-tracker
+PostgreSQL on archivum      ─┼─→ gotosocial, speedtest-tracker
 cloudflared (external)      ─┘        │
 TrueNAS data → tank ───────────────→ jellyfin cutover, samba/nfs clients
 ```
@@ -177,7 +191,6 @@ needed:
 
 | Service | How |
 | --- | --- |
-| immich | `services.immich.database.enable = true` — also pulls in the vectorchord/pgvector extensions the shared instance needs |
 | gotosocial | `services.gotosocial.setupPostgresqlDB = true` — sets `db-type`, points `db-address` at the socket, creates DB and role |
 | speedtest-tracker | No `createLocally` equivalent; needs hand-written `ensureDatabases`/`ensureUsers` and `DB_CONNECTION = "pgsql"`. Honestly, SQLite is fine here — it is speedtest history, and it saves the wiring |
 
@@ -189,6 +202,53 @@ choose it.
 - [ ] **cloudflared.** `services.cloudflared` (2026.5.2) with the tunnel
       credentials JSON under `secrets/`. Declarative ingress rules replace the
       container's config.
+- [ ] **sops-nix, replacing git-crypt.** The point is the risk row below: today
+      every secret is copied into the world-readable `/nix/store`. git-crypt
+      protects the *repository*, not the *machine*. sops-nix decrypts at
+      activation into `/run/secrets`, so the value never enters the store.
+
+      Do it **after the restore test, before decommissioning TrueNAS** — while
+      breaking archivum is still cheap. Migrate archivum first, confirm, then
+      quaesitum; the two schemes coexist, so it need not be one sitting.
+
+      Keys: each host's existing `/etc/ssh/ssh_host_ed25519_key`, converted with
+      `ssh-to-age`. No new key material to provision on any host — but it does
+      mean a host key must survive a reinstall, or its secrets must be re-keyed.
+      One personal age key on fabricum for editing. `nixos-rebuild build` from
+      fabricum keeps working without the target's key, since decryption happens
+      at activation, not eval.
+
+      Twelve secrets, splitting by *when* the value is needed:
+
+      | Kind | Secrets | Work |
+      | --- | --- | --- |
+      | Runtime file path | `acme-cloudflare.env`, `ntfy-url`, `ntfy-token`, `storagebox-password`, `storagebox-restic-password`, `syncthing-gui-password`, `wg-qbtwg.conf`, quaesitum `ntfy.env` + `searxng.env` | Mechanical: `toString ../secrets/x` → `config.sops.secrets.x.path` |
+      | Read at eval | `searxng-secret`, `secrets/email`, `syncthing-iphone-id` | All three dissolve — see below |
+      | Read at eval | `storagebox-target` | The one real snag |
+
+      The eval-time ones cannot survive as-is, because sops has nothing to give
+      nix at eval. Three of the four go away rather than migrate:
+      `searxng-secret` becomes `secret_key = "$SEARXNG_SECRET"` in the
+      environment file (the searx module interpolates `$VAR` into settings);
+      `secrets/email` is an ACME registration address, already hardcoded in
+      cleartext in `hosts/quaesitum/secrets/acme.nix`, so inline it and delete
+      the file; a syncthing device ID is a public key fingerprint, so inline it.
+
+      `storagebox-target` is the awkward one. `services.restic.backups.*` has
+      `repositoryFile`, which covers the repo URL — but `sftp.command` also
+      needs the hostname, and that string is built at eval. It needs a wrapper
+      reading the target at runtime (`sh -c 'exec sshpass -f … ssh … $(cat
+      /run/secrets/storagebox-target) -s sftp'`). Fiddly, and it touches the one
+      service that is expensive to test.
+
+      Two things to keep in mind. Put the sops files **outside** `secrets/`
+      (e.g. `hosts/archivum/secrets.yaml`) or narrow `.gitattributes`, otherwise
+      git-crypt encrypts them too and the double layer breaks confusingly
+      whenever the repo is locked. And the repo-wide "inert until the secret
+      exists" pattern weakens: an encrypted file is always present, so a missing
+      secret becomes a service failing at activation instead of an eval warning.
+      Gating on `builtins.pathExists ./secrets.yaml` keeps the property at
+      per-host rather than per-secret granularity, which is worth doing.
 
 ### Tunnel ingress
 
@@ -231,14 +291,15 @@ so the fix is to keep Postgres modest rather than generous:
 | --- | --- | --- |
 | ZFS ARC | cap ~16–24 GB (`boot.kernelParams` / `zfs_arc_max`) | Linux default is 50 % of RAM = 32 GB, which is more than this workload needs |
 | PostgreSQL | `shared_buffers` 2–4 GB | The whole VM lives in 4 GB today; a huge value would fight ARC, not help |
-| immich (server + ML) | ~4 GB | ML jobs spike during initial import, then idle |
+| syncthing | negligible | Scales with file count, not library size |
 | UniFi OS Server (podman, bundles its own mongo) | ~4–8 GB | Ubiquiti's stated sizing; grows with retention |
 | jellyfin | ~1–2 GB | VAAPI transcode, not CPU |
 | Everything else + slack | remainder | Comfortable |
 
 Placement matters more than sizing: keep `/var/lib/postgresql` on the NVMe
-`rpool` (it already is, via `rpool/var`) and *not* on spinning `tank`. Immich
-is the opposite — DB on `rpool`, the upload library on `tank`.
+`rpool` (it already is, via `rpool/var`) and *not* on spinning `tank`. Bulk
+data is the opposite — photos and media belong on `tank`, where capacity and
+snapshots matter more than latency.
 
 If you want the last few percent, a dedicated dataset for Postgres with
 `recordsize=16K` and `atime=off` matches its page size, and `full_page_writes`
@@ -301,6 +362,27 @@ non-destructive operation.
 
 Low risk, builds confidence, shrinks the Docker VM.
 
+- [x] **Photo backup (replaces immich).** `services/syncthing.nix` — the phone's
+      camera roll into `tank/photos/iphone`, plus a read-only `photos` samba
+      share for browsing. Inert until
+      `hosts/archivum/secrets/syncthing-iphone-id` holds the phone's device ID;
+      pairing is the one manual step. Setup is in `hosts/archivum/README.md`.
+
+      The folder is **send-only on the phone, receive-only on archivum**, so a
+      deletion cannot propagate in either direction, with a year of staggered
+      versioning under that. `tank/photos` gets the longest sanoid retention on
+      the box (30 daily / 12 monthly / 3 yearly) and is in the restic paths — it
+      is the only dataset on `tank` with no second copy anywhere.
+
+      Needs `zfs create tank/photos` before the first rebuild.
+- [ ] **Rescue the existing immich library.** Before the Docker VM goes away,
+      copy `UPLOAD_LOCATION/library/` out of the immich container — those are
+      the original files, and they are what survives. The immich database is
+      *not* worth rescuing: albums and faces are rebuildable or expendable, and
+      keeping the DB is what forced the migration in the first place. Drop the
+      files into `tank/photos/immich-export/` alongside the syncthing folder,
+      confirm a restic run has carried them offsite, and only then delete the
+      container.
 - [ ] **Minecraft** — delete. Archive the world dir somewhere cheap first;
       rebuild with `services.minecraft-server` if anyone ever asks.
 - [ ] **openspeedtest** — the one service with no module. `oci-containers`
@@ -327,12 +409,6 @@ Low risk, builds confidence, shrinks the Docker VM.
 
 One at a time, each stop → dump → restore → verify → soak.
 
-- [ ] **immich** — the highest-risk item. `services.immich` (2.7.5) with
-      `database.enable`. Steps: align the container to the same immich version
-      first, stop it, `pg_dump` the immich DB, copy `UPLOAD_LOCATION` to a
-      dataset on `tank`, restore, then let it re-run ML jobs. The library files
-      are the irreplaceable part; the DB can be rebuilt from them at some cost,
-      the reverse is not true. Add it to restic before first use.
 - [ ] **gotosocial** — see the dedicated procedure below.
 - [ ] **jellyfin** — already running on archivum, so this is a state merge, not
       an install. Decide whether the VM's watch history and metadata matter. If
@@ -528,12 +604,12 @@ updating, and the repo checkout that auto-updates pull from currently lives at
 | Backup gap between TrueNAS shutdown and archivum's job working | Phase 1 backup + restore test precedes Phase 3; overlap one cycle |
 | **`tank` is currently a stripe — zero redundancy until the Phase 3a rebuild** | Rebuild as raidz1 immediately (Phase 3a) — nothing on it is a sole copy today, so the rebuild is free; it stops being free once TrueNAS data lands |
 | Everything then on one box with one raidz1 pool — one disk of parity, long resilver window on 14 TB drives | Offsite restic before Phase 3, ZFS snapshots, tested restores, smartd alerts wired up, UPS |
-| immich DB/library mismatch or version skew | Align versions before dumping; library files are the source of truth |
+| Photos exist only on the phone until syncthing is paired, and iOS syncs only in foreground/background windows rather than continuously | Do not export the immich library out of the old container until `tank/photos` has a full copy and one restic cycle has carried it offsite. Treat "same-day offsite" as untrue for photos |
 | gotosocial domain or identity change | Domain is immutable in practice — keep it byte-identical |
 | UniFi OS Server flake is third-party and self-described as unstable, and sits in the nightly auto-update path | Preserve the pre-migration `.unf` as a universal rollback; `services.unifi` remains a working fallback. A flake update that fails to build stops before activation |
 | `tank` fills during data migration | Check headroom before the first send |
 | ZFS ARC and Postgres `shared_buffers` double-caching the same blocks | Cap `zfs_arc_max`, keep `shared_buffers` small — see the Phase 2 budget |
-| `secrets/*` are read into the world-readable nix store — now including the Storage Box password, since Hetzner offers no key auth | Existing behaviour, not a regression; the subaccount is scoped to its own directory, and restic's own encryption is what actually protects the backup. sops-nix fixes it properly later |
+| `secrets/*` are read into the world-readable nix store — now including the Storage Box password, since Hetzner offers no key auth | Existing behaviour, not a regression; the subaccount is scoped to its own directory, and restic's own encryption is what actually protects the backup. **Closed by the sops-nix item in Phase 2**, which is where this stops being an accepted tradeoff |
 
 ## Open questions
 
