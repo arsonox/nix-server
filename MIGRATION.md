@@ -51,7 +51,7 @@ Decisions taken (2026-07-29):
 | TrueNAS | file storage + Hetzner Storage Box backups | archivum `tank` | native ZFS + `services.restic` |
 | Owncast | live streaming | archivum | `services.owncast` (0.2.5) |
 | Jellyfin | media server | archivum (**already running there**) | `services.jellyfin` (10.11.11) |
-| PostgreSQL | all databases | archivum | `services.postgresql` (17.10) |
+| PostgreSQL | all databases (currently **16**) | archivum | `services.postgresql`, pinned to `postgresql_18` (18.4) |
 | Minecraft | idle, nobody plays | **delete** | `services.minecraft-server` if ever revived |
 | fabricum | dev/general | Phase 6 decision | — |
 
@@ -180,11 +180,35 @@ commands for each live in `hosts/archivum/README.md`.
 
 ## Phase 2 — Shared infrastructure
 
-- [ ] **PostgreSQL.** `services.postgresql` on archivum. Check the VM's major
-      version first: dump with the *target* version's `pg_dumpall` (17.x) to
-      avoid cross-version restore problems. Per-app databases via
-      `ensureDatabases`/`ensureUsers`, unix-socket auth where possible so no
-      passwords are needed.
+- [ ] **PostgreSQL — 16 on the VM → 18 on archivum** (confirmed 2026-08-05).
+      Set `package = pkgs.postgresql_18` explicitly. Without it the module
+      derives the major from `system.stateVersion` (`"25.11"` → `postgresql_17`)
+      and `pkgs.postgresql` is 17.10 — 18.4 is packaged but only if asked for by
+      name. Upstream even warns, at `postgresql.nix:645`, that a
+      `stateVersion`-derived package is "not pinned"; pinning makes the version
+      a decision in the file rather than a side effect of a variable set for
+      unrelated reasons.
+
+      Note `nh search` defaults to `--channel nixos-unstable`, where the
+      `postgresql` alias *is* 18.4. This repo pins `nixos-26.05`, where it is
+      17.10. Use `nh search -c nixos-26.05` to see what will actually be built.
+
+      18 over 17 because this is a *shared* instance: upgrades are
+      all-or-nothing across every app, and 18 is supported to Nov 2030 against
+      17's Nov 2029. Same migration effort either way — 16 → 18 is one
+      dump/restore, no intermediate hop. Nothing left here constrains the
+      choice now that immich (pgvector/vectorchord) is dropped.
+
+      Dump with the **target** version's `pg_dumpall` — new client against old
+      server is the supported direction, not the reverse. The VM only has 16's
+      binaries, so run it from archivum over the network (`-h <vm>`) rather than
+      on the VM itself. Check first that the VM's Postgres actually listens
+      somewhere archivum can reach and that `pg_hba.conf` will let it in — if it
+      is bound to localhost or a Docker bridge, that is a prerequisite, not a
+      surprise to hit halfway through.
+
+      Per-app databases via `ensureDatabases`/`ensureUsers`, unix-socket auth
+      where possible so no passwords are needed.
 **One shared instance**, mirroring the single Postgres VM you run today. Wiring
 per service, all over the `/run/postgresql` unix socket so no passwords are
 needed:
@@ -196,8 +220,8 @@ needed:
 
 Accept the tradeoff knowingly: a shared instance means major-version upgrades
 are all-or-nothing for every app at once. In exchange, one `pg_dumpall` in
-restic covers everything. NixOS pins the Postgres major to `system.stateVersion`,
-so a nixpkgs bump will not move it under you — the upgrade happens when you
+restic covers everything. The major is pinned explicitly in the config (see
+above), so no nixpkgs bump will move it under you — the upgrade happens when you
 choose it.
 - [ ] **cloudflared.** `services.cloudflared` (2026.5.2) with the tunnel
       credentials JSON under `secrets/`. Declarative ingress rules replace the
@@ -263,18 +287,48 @@ Current state, and what each becomes:
 
 So the tunnel that has to work on day one carries exactly two hostnames.
 
+**The existing tunnel is token-based, i.e. remotely managed** (confirmed
+2026-08-05 — the container runs `tunnel run` with `TUNNEL_TOKEN` and nothing
+else). Its ingress rules live in the Cloudflare dashboard, not on the VM, so
+there is no `config.yml` to transcribe. Read the mapping off Zero Trust →
+Networks → Tunnels → Public Hostnames; that is the source data for both
+`publicHosts` and the nginx vhosts, and nothing on the VM records it.
+
+Note the `TUNNEL_TOKEN` is a full credential — base64 of account tag, tunnel ID
+and tunnel secret, equivalent to a credentials JSON. Rotate rather than reuse if
+it has ever been in a shared or committed file.
+
+The NixOS module only supports **locally managed** tunnels: `credentialsFile`
+plus ingress declared in nix, with no token option. That is the right direction
+anyway — it is the difference between the routing living in this repo and living
+in a dashboard — but it means the archivum tunnel is a new one, not a moved one.
+
 **Use a second tunnel rather than moving the existing one.** Create a new tunnel
 on archivum with its own credentials, and cut over one hostname at a time by
 repointing that hostname's CNAME to `<new-tunnel-uuid>.cfargotunnel.com`.
 Rollback is then a DNS change rather than a config restore, and the old tunnel
 keeps serving whatever has not moved yet. Delete the old tunnel once both
-hostnames have moved and soaked.
+hostnames have moved and soaked. This also sidesteps converting a
+remotely-managed tunnel to a locally-managed one.
 
 Do not run the *same* tunnel from two machines during the migration — Cloudflare
 treats that as replicas and load-balances between them, which would send half
 your requests to whichever box does not have the service yet.
 
-- [ ] Create the archivum tunnel, credentials JSON into `secrets/`.
+- [x] **`services/cloudflared.nix` written.** All hostnames route through nginx
+      at `https://127.0.0.1:443` with a per-host `originServerName`, so SNI
+      matches the wildcard cert and nothing has to disable TLS verification on
+      the loopback hop. `publicHosts` is an allowlist over a `http_status:404`
+      catch-all, so a stray CNAME cannot on its own expose `kuma.nox.onl` or
+      `syncthing.nox.onl`. No firewall ports — the tunnel dials out. Adding a
+      public service is one nginx vhost plus one string.
+- [ ] Create the archivum tunnel — interactive, so it is a by-hand step:
+      `cloudflared tunnel login` (browser, writes `cert.pem`) then
+      `cloudflared tunnel create archivum` (writes `~/.cloudflared/<uuid>.json`).
+      UUID into `tunnelId`, JSON into
+      `hosts/archivum/secrets/cloudflared-tunnel.json`. `cert.pem` is only
+      needed for management commands, not for `run`, so it stays out of the
+      config.
 - [ ] `jelly.nox.onl`: drop or repoint at cutover time, whichever you feel like.
 - [ ] Cut over `party.nox.onl` first — owncast is the low-stakes one, and it
       proves the tunnel works end to end.
@@ -541,19 +595,67 @@ Preparation:
 - [ ] Decide the DB password path under `secrets/`, or use unix-socket auth
       against the shared Postgres.
 
-Cutover:
+### Keeping the window short
 
-- [ ] Announce or accept a short outage — pick a quiet window, and keep it
-      short enough that remote retry queues cover it.
-- [ ] Stop the container. Leave it stopped for the rest of the procedure.
-- [ ] `pg_dump` the gotosocial DB with the target version's client (17.x).
-- [ ] Copy media if local: `storage-local-base-path` onto a `tank` dataset,
-      preserving ownership; it grows without bound, so it does not belong on
-      `rpool`.
-- [ ] Restore the dump into the shared Postgres, start gotosocial, watch the
-      first-run migration log complete before touching anything else.
-- [ ] Repoint `social.nox.onl`'s CNAME at the archivum tunnel. This is the
-      cutover moment — it is a DNS change, so it is also the rollback.
+The concern is being penalised by peers for an outage. Worth aiming at the right
+risk: peers do not blacklist for downtime. Mastodon has a *delivery
+availability* mechanism (an `unavailable` state at
+`/admin/instances?availability=unavailable`, added in mastodon/mastodon#15771),
+but it is reversible suppression after repeated failures, and it clears once you
+are reachable again. Exact thresholds unconfirmed — do not plan against a
+specific day-count.
+
+The thing that does permanent damage is the split-brain this section already
+forbids: two servers answering for one domain leave remote instances with
+missing posts, broken threads and inconsistent follow state, and no retry fixes
+that. **Do not trade split-brain risk for a shorter window.** The goal is a
+short, rehearsed, single-writer cutover — not a minimal one. 10–20 minutes is
+the target and is comfortably within tolerance.
+
+So keep everything out of the window that can be:
+
+- [ ] **Rehearse the dump/restore against a scratch DB on archivum**, days
+      ahead. This is the highest-value prep step by a distance: it produces a
+      measured duration instead of an estimate, and it proves the 16 → 18
+      restore path before it is load-bearing. An unrehearsed cutover is how ten
+      minutes becomes two hours. Do it twice; the second should be boring.
+- [ ] **Prune remote media cache first.** It shrinks the copy and the dump
+      together, and it is the cheapest size reduction available.
+- [ ] **Bulk-copy media in advance** if storage is local, repeatedly over the
+      preceding days, so the in-window pass is only a delta. On R2 this step is
+      zero. Target a `tank` dataset — it grows without bound, so it does not
+      belong on `rpool`.
+- [ ] **Pre-build everything else**: Postgres role and database, the
+      `services.gotosocial` unit present but stopped, config transcribed and
+      evaluated. TLS is already covered by archivum's `*.nox.onl` wildcard, so
+      no certificate is issued inside the window.
+
+Rejected: logical replication from 16 to 18 for a near-zero window. It does not
+replicate sequences, so they need hand-syncing — and this database *is* the
+instance identity. That is exactly where a subtle error is unrecoverable rather
+than merely annoying.
+
+Cutover — only the delta belongs in here:
+
+- [ ] Pick a quiet window. Stop the container. Leave it stopped for the rest of
+      the procedure.
+- [ ] Final `pg_dump` of the gotosocial DB with the target version's client
+      (18.x), and restore into the shared Postgres.
+- [ ] Final media rsync — the delta only.
+- [ ] Start gotosocial, watch the first-run migration log complete before
+      touching anything else.
+- [ ] Cut the ingress. **Stop the VM's `cloudflared` connector first.**
+      `cloudflared` supports multiple replicas of one tunnel for HA and
+      Cloudflare distributes requests across connectors, so leaving the old one
+      running is split-brain by default — and it is why the tunnel cannot be
+      used for a graceful overlap. Stopping the app is not enough; stop the
+      connector.
+
+      This is the cutover moment and therefore the rollback: stop archivum's
+      connector and gotosocial, start the VM's, and the old container is still
+      intact behind it. That rollback stays valid only until the new instance
+      federates — after the first inbox delivery lands on archivum, going back
+      means losing whatever arrived. Verify quickly, in that order.
 
 Verification — do all of these before declaring it done:
 
