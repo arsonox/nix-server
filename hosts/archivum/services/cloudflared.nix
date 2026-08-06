@@ -8,7 +8,7 @@ let
   tunnelId = "53ac69f4-9260-477f-9800-f31198468116";
 
   # Hostnames this tunnel is allowed to carry. Everything else gets the 404 catch-all
-  publicHosts = [ kuma.nox.onl ];
+  publicHosts = [ "kuma.nox.onl" ];
 
   hasCredentials = builtins.pathExists credentialsFile;
   configured = tunnelId != "" && hasCredentials;
