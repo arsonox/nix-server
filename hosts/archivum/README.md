@@ -54,11 +54,18 @@ replaces immich: see the decision note in `MIGRATION.md`.
 
 ### GUI password
 
+`https://syncthing.nox.onl` via nginx; the GUI listens on loopback only. Set the
+password before pairing anything.
+
 ```bash
 echo -n 'the password' > hosts/archivum/secrets/syncthing-gui-password
 git add hosts/archivum/secrets/syncthing-gui-password
 sudo nixos-rebuild switch --flake .#archivum
 ```
+
+Behind a proxy, syncthing 403s every request with "Host check error", it
+rejects any `Host` that is not localhost or an IP, to blunt DNS rebinding. Hence
+`gui.insecureSkipHostcheck`.
 
 
 ### Pairing the phone
@@ -111,3 +118,40 @@ secrets/acme-cloudflare.env
 ```
 CF_DNS_API_TOKEN=...
 ```
+
+If the token has an **IP address filter**, it must list the IPv6 prefix as well
+as the IPv4 address — archivum prefers v6, so a v4-only filter denies the API
+call and the certificate silently stays self-signed.
+
+## Cloudflare tunnel
+
+`services/cloudflared.nix` is the only route in from outside the LAN. Everything
+goes through nginx, so adding a public service is one vhost plus one string in
+`publicHosts` — and `publicHosts` is an allowlist over a 404 catch-all, so
+creating a CNAME is not on its own enough to expose a vhost.
+
+Creating the tunnel is interactive and has to be done by hand:
+
+```bash
+cloudflared tunnel login             # browser; writes ~/.cloudflared/cert.pem
+cloudflared tunnel create archivum   # writes ~/.cloudflared/<uuid>.json
+```
+
+Put the UUID in `tunnelId` at the top of `services/cloudflared.nix`. It is not
+a secret, it is published in DNS as `<uuid>.cfargotunnel.com` and the JSON at
+`hosts/archivum/secrets/cloudflared-tunnel.json`:
+
+```bash
+git add hosts/archivum/secrets/cloudflared-tunnel.json
+sudo nixos-rebuild switch --flake .#archivum
+```
+
+`cert.pem` is only needed for management commands (`create`, `route`, `delete`),
+never for `run`, so it does not belong in the config.
+
+Point a hostname at the tunnel with `cloudflared tunnel route dns archivum
+<hostname>`, or by creating the CNAME by hand.
+
+**Never run the same tunnel from two machines.** Cloudflare treats multiple
+connectors as replicas and load-balances across them, so half the requests would
+land on whichever box does not have the service.
