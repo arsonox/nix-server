@@ -62,6 +62,36 @@ in
       };
     };
 
+    virtualHosts."unifi.nox.onl" = {
+      useACMEHost = "nox.onl";
+      forceSSL = true;
+      # self-signed cert on backend; proxy_ssl_verify off by default
+      locations."/" = {
+        proxyPass = "https://127.0.0.1:11443";
+        proxyWebsockets = true;
+        extraConfig = ''
+          # Firmware images and .unf restores are uploaded through the UI, and
+          # the 10m default would 413 them at the worst possible moment.
+          client_max_body_size 1G;
+          proxy_read_timeout 86400s;
+          proxy_send_timeout 86400s;
+        '';
+      };
+
+      # UniFi checks Origin against hostname and refuses live-update
+      # socket when it sees proxy. Stripping header as workaround.
+      locations."/wss/" = {
+        proxyPass = "https://127.0.0.1:11443";
+        proxyWebsockets = true;
+        extraConfig = ''
+          proxy_set_header Origin "";
+          proxy_buffering off;
+          proxy_read_timeout 86400s;
+          proxy_send_timeout 86400s;
+        '';
+      };
+    };
+
     virtualHosts."syncthing.nox.onl" = {
       useACMEHost = "nox.onl";
       forceSSL = true;

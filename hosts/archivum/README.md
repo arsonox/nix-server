@@ -151,7 +151,15 @@ bridge, that is a prerequisite, not a surprise to hit halfway through.
 `services/unifi.nix` runs **UniFi OS Server** from
 `github:rcambrj/unifi-os-server`, running one privileged podman container.
 
-UI at `https://10.201.3.229:11443`. Devices use 8080 (inform), 8443, 3478/udp.
+UI at `https://unifi.nox.onl`, or directly on `https://10.201.3.229:11443`.
+Direct port stays open as fallback.
+
+Devices use 8080 (inform), 8443 and 3478/udp.
+
+Two UniFi quirks the vhost works around: it validates `Host` as part of its
+CSRF handling, so the header must pass through unrewritten (NixOS'
+`recommendedProxySettings` does this), and it rejects a proxied `Origin` on the
+websocket path, so that header is stripped on `/wss/`.
 
 Point a device at the controller:
 
