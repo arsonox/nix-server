@@ -19,6 +19,13 @@
     nssmdns6 = true;
     openFirewall = true;
 
+    allowInterfaces = [
+      "enp100s0f0np0"
+      "enp100s0f1np1"
+      "enp102s0"
+      "enp103s0"
+    ];
+
     extraServiceFiles = {
       smb = ''
         <?xml version="1.0" standalone='no'?><!--*-nxml-*-->
