@@ -24,6 +24,26 @@ zfs create tank/photos
 
 After setting up the system, set up samba login with `sudo smbpasswd -a nox`.
 
+### Discovery
+
+Three separate mechanisms, one per client family:
+
+| Clients | Mechanism | Where |
+| --- | --- | --- |
+| macOS, Linux | mDNS / Bonjour | `services/avahi.nix` |
+| Windows | WS-Discovery | `services.samba-wsdd` |
+| — | NetBIOS | off; `nmbd.enable = false` |
+
+Avahi's `publish.userServices` only *permits* publishing from the service
+directory — nothing fills it automatically, so the SMB advert is written by
+hand in `extraServiceFiles`. Without it `archivum.local` resolves but no shares
+appear.
+
+```bash
+avahi-browse -at            # what this host is advertising
+getent hosts archivum.local # does resolution work at all
+```
+
 ## Offsite backups (Hetzner Storage Box)
 
 
