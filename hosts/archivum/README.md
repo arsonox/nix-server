@@ -39,6 +39,11 @@ avahi-browse -at            # what this host is advertising
 getent hosts archivum.local # does resolution work at all
 ```
 
+For Avahi, generate a list of allowed interfaces with
+```bash
+cd /sys/class/net && for i in *; do [ -e "$i/device" ] && echo "$i"; done
+```
+
 ## Offsite backups (Hetzner Storage Box)
 
 
