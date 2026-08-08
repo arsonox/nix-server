@@ -180,7 +180,9 @@ commands for each live in `hosts/archivum/README.md`.
 
 ## Phase 2 — Shared infrastructure
 
-- [ ] **PostgreSQL — 16 on the VM → 18 on archivum** (confirmed 2026-08-05).
+- [x] **PostgreSQL — 16 on the VM → 18 on archivum** (confirmed 2026-08-05;
+      `services/postgresql.nix` written 2026-08-06 — the config, not the data
+      migration, which is still to run).
       Set `package = pkgs.postgresql_18` explicitly. Without it the module
       derives the major from `system.stateVersion` (`"25.11"` → `postgresql_17`)
       and `pkgs.postgresql` is 17.10 — 18.4 is packaged but only if asked for by
@@ -208,7 +210,18 @@ commands for each live in `hosts/archivum/README.md`.
       surprise to hit halfway through.
 
       Per-app databases via `ensureDatabases`/`ensureUsers`, unix-socket auth
-      where possible so no passwords are needed.
+      where possible so no passwords are needed — declared by each service's
+      own file, not centrally, so nothing outlives the service that wanted it.
+
+      Backups are `services.postgresqlBackup` (`pg_dumpall`, zstd, 01:15 — an
+      hour before restic), and restic now **excludes `/var/lib/postgresql`**:
+      backing up a live datadir produces a torn copy that restores cleanly
+      right up until it doesn't. The dump is the backup; the datadir is not.
+
+      `full_page_writes = false` is set, which is safe *only* because the
+      datadir is on ZFS (`rpool/var`) — CoW makes a partially-written page
+      impossible. It is the one line in that file that becomes a data-loss bug
+      if postgres ever moves to a non-ZFS filesystem.
 **One shared instance**, mirroring the single Postgres VM you run today. Wiring
 per service, all over the `/run/postgresql` unix socket so no passwords are
 needed:
@@ -223,7 +236,7 @@ are all-or-nothing for every app at once. In exchange, one `pg_dumpall` in
 restic covers everything. The major is pinned explicitly in the config (see
 above), so no nixpkgs bump will move it under you — the upgrade happens when you
 choose it.
-- [ ] **cloudflared.** `services.cloudflared` (2026.5.2) with the tunnel
+- [x] **cloudflared.** `services.cloudflared` (2026.5.2) with the tunnel
       credentials JSON under `secrets/`. Declarative ingress rules replace the
       container's config.
 - [ ] **sops-nix, replacing git-crypt.** The point is the risk row below: today
@@ -322,7 +335,7 @@ your requests to whichever box does not have the service yet.
       catch-all, so a stray CNAME cannot on its own expose `kuma.nox.onl` or
       `syncthing.nox.onl`. No firewall ports — the tunnel dials out. Adding a
       public service is one nginx vhost plus one string.
-- [ ] Create the archivum tunnel — interactive, so it is a by-hand step:
+- [x] Create the archivum tunnel — interactive, so it is a by-hand step:
       `cloudflared tunnel login` (browser, writes `cert.pem`) then
       `cloudflared tunnel create archivum` (writes `~/.cloudflared/<uuid>.json`).
       UUID into `tunnelId`, JSON into

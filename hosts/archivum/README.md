@@ -88,6 +88,47 @@ A device ID is a public key fingerprint, not a secret. It lives under
 removed on the next restart.
 
 
+## PostgreSQL
+
+One shared instance, `services/postgresql.nix`, unix socket only. Apps declare
+their own database and role; nothing is declared centrally.
+
+The major version is **pinned by name** (`postgresql_18`). Do not remove the
+pin: without it the module derives the major from `system.stateVersion`.
+The procedure is in `POSTGRESQL-UPGRADES.md`.
+
+```bash
+sudo -u postgres psql              # socket auth, no password
+sudo -u postgres psql -l           # what exists
+```
+
+### Backups
+
+`services.postgresqlBackup` writes a `pg_dumpall` to
+`/var/backup/postgresql/all.sql.zstd` at 01:15, an hour before restic. Restic
+backs up that dump and **excludes `/var/lib/postgresql`**.
+
+Restoring means replaying the dump, not dropping files back in place:
+
+```bash
+zstd -dc /var/backup/postgresql/all.sql.zstd | sudo -u postgres psql -f -
+```
+
+### Migrating from the old VM
+
+Dump with the **target** version's `pg_dumpall` — new client against old server
+is the supported direction, never the reverse. The VM only has 16's binaries,
+so run it from archivum:
+
+```bash
+sudo -u postgres pg_dumpall -h <vm> -U postgres > /var/tmp/vm.sql
+sudo -u postgres psql -f /var/tmp/vm.sql
+```
+
+Check first that the VM's postgres listens somewhere archivum can reach and
+that its `pg_hba.conf` allows it. If it is bound to localhost or a docker
+bridge, that is a prerequisite, not a surprise to hit halfway through.
+
 ## Snapshots
 
 `services/sanoid.nix` snapshots `rpool/{root,var,home}`, `tank/nox`,

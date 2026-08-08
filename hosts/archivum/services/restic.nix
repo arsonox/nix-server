@@ -48,6 +48,7 @@ in
 
       paths = [
         "/var/lib"
+        "/var/backup/postgresql"
         "/home"
         "/mnt/tank/nox"
         "/mnt/tank/photos"
@@ -61,6 +62,7 @@ in
         "/var/lib/jellyfin/metadata" # regenerated from the library
         "/var/lib/jellyfin/transcodes"
         "/var/lib/netdata"
+        "/var/lib/postgresql"
         "/var/lib/private/netdata"
         "/var/lib/systemd/coredump"
         "/home/*/.cache"
