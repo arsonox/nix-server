@@ -79,6 +79,12 @@
     options = [ "zfsutil" ];
   };
 
+  fileSystems."/mnt/tank/photos" = {
+    device = "tank/photos";
+    fsType = "zfs";
+    options = [ "zfsutil" ];
+  };
+
   swapDevices = [ ];
 
   nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
