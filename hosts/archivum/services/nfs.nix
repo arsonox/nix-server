@@ -29,9 +29,6 @@
 
   services.rpcbind.enable = true;
 
-  # services.nfs has no openFirewall option, so the ports (rpcbind, nfsd,
-  # statd/lockd/mountd as pinned above, plus mountd's rpc port) are listed by
-  # hand here - unlike samba, which uses openFirewall.
   networking.firewall = {
     allowedTCPPorts = [
       111
