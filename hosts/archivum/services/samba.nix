@@ -71,5 +71,6 @@
   # outside of samba.
   systemd.tmpfiles.rules = [
     "z /mnt/tank/media 2775 nox media -"
+    "z /mnt/tank/nox 0755 nox users -"
   ];
 }
