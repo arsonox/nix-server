@@ -36,4 +36,10 @@
   '';
 
   systemd.services.netdata.serviceConfig.CapabilityBoundingSet = [ "CAP_SETGID" ];
+
+  # metrics history needs no backup
+  archivum.backup.exclude = [
+    "/var/lib/netdata"
+    "/var/lib/private/netdata"
+  ];
 }

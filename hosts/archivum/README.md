@@ -37,6 +37,23 @@ journalctl -fu restic-backups-storagebox.service
 
 `initialize = true` creates the repository on first run.
 
+### What gets backed up
+
+The roots are broad on purpose — `/var/lib`, `/home`, `tank/nox`,
+`tank/photos` — so a new service's state is backed up without anyone
+remembering to ask. An allowlist would get that wrong silently, and you would
+find out at restore time.
+
+Carving something back out is the opt-in, and it belongs in the file for the
+service that owns the path, not in `restic.nix`:
+
+```nix
+archivum.backup.exclude = [ "/var/lib/foo/cache" ];
+archivum.backup.paths = [ "/var/backup/foo" ];   # state outside the roots
+```
+
+Delete the service, and its exclusions leave with it.
+
 ### Restore test
 
 ```bash
@@ -128,6 +145,26 @@ sudo -u postgres psql -f /var/tmp/vm.sql
 Check first that the VM's postgres listens somewhere archivum can reach and
 that its `pg_hba.conf` allows it. If it is bound to localhost or a docker
 bridge, that is a prerequisite, not a surprise to hit halfway through.
+
+## UniFi
+
+`services/unifi.nix` runs **UniFi OS Server** from
+`github:rcambrj/unifi-os-server`, running one privileged podman container.
+
+UI at `https://10.201.3.229:11443`. Devices use 8080 (inform), 8443, 3478/udp.
+
+Point a device at the controller:
+
+```bash
+ssh ubnt@<ap-ip>
+set-inform http://10.201.3.229:8080/inform
+```
+
+### Backups
+
+Turn on `.unf` autobackups in the UI (Settings → System → Backups). They land
+in the state dir and restic picks them up. Restic **excludes**
+`/var/lib/unifi-os-server/mongodb`.
 
 ## Snapshots
 

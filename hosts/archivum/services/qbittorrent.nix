@@ -13,8 +13,8 @@
     ];
     portMappings = [
       {
-        from = 8080;
-        to = 8080;
+        from = 8082;
+        to = 8082;
         protocol = "tcp";
       }
     ];
@@ -29,7 +29,7 @@
   services.qbittorrent = {
     enable = true;
     openFirewall = false;
-    webuiPort = 8080;
+    webuiPort = 8082; #unifi needs 8080
     torrentingPort = 57140;
     serverConfig = {
       Core.AutoDeleteAddedTorrentFile = "Never";
@@ -66,11 +66,10 @@
     vpnNamespace = "qbtwg";
   };
 
-  # Downloads land in /mnt/tank/media, which is shared with the samba `media`
-  # share (see services/samba.nix) - keep them writable by the media group.
+  # Downloads land in /mnt/tank/media, keep them writable by the media group.
   systemd.services.qbittorrent.serviceConfig.UMask = "0002";
 
   networking.firewall = {
-    allowedTCPPorts = [ 8080 ];
+    allowedTCPPorts = [ 8082 ];
   };
 }

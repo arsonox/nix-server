@@ -548,10 +548,20 @@ Consequences to handle:
 
 Prerequisites:
 
-- [ ] Add the flake input, wire its module into archivum in `flake.nix`.
-- [ ] Enable podman and `virtualisation.oci-containers.backend = "podman"` —
-      the module asserts both. Note `hosts/unused/services/docker.nix` is
-      *docker*; do not adopt it, write the podman config fresh.
+- [x] Add the flake input, wire its module into archivum in `flake.nix`.
+      Deliberately **not** `follows`-ing nixpkgs: upstream tracks
+      nixos-unstable and self-describes as unstable, so it builds against what
+      it is actually tested with rather than our 26.05.
+- [x] Enable podman and `virtualisation.oci-containers.backend = "podman"` —
+      the module asserts both. Written fresh in
+      `hosts/archivum/services/podman.nix`; `hosts/unused/services/docker.nix`
+      is *docker* and was not adopted.
+- [x] **Port collision resolved: qbittorrent's WebUI moved 8080 → 8082**
+      (2026-08-06). UOS publishes 8080 on the host for device inform, and
+      qbittorrent's vpn-confinement port mapping already held it. UniFi keeps
+      8080 because that port is baked into every AP's `set-inform` URL and into
+      factory-reset discovery; qbittorrent's is a bookmark. Requires updating
+      the bookmark and anything pointing at the WebUI (\*arr apps, if any).
 
 Cutover:
 
@@ -569,7 +579,12 @@ Cutover:
 - [ ] Expect a short window where the network is unmanaged. APs keep forwarding
       traffic throughout; you lose visibility and config changes, not the
       network.
-- [ ] Add UOS Server's state to restic once it is up.
+- [x] UOS Server's state is in restic via `/var/lib`, with
+      `/var/lib/unifi-os-server/mongodb` **excluded** — a file-by-file walk of
+      a live mongo datadir is torn in the same way a live postgres datadir is.
+- [ ] Turn on `.unf` autobackups in the UI once it is up. That, not the mongo
+      files, is what restic is actually preserving; until it is on there is no
+      restorable offsite copy of the controller.
 
 Fallback if it does not work out: `services.unifi` (unifi 10.2.105 in nixpkgs,
 two maintainers, a NixOS VM test) still exists and the preserved `.unf` restores

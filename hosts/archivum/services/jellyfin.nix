@@ -30,6 +30,12 @@
     };
   };
 
+  archivum.backup.exclude = [
+    "/var/lib/jellyfin/cache"
+    "/var/lib/jellyfin/metadata"
+    "/var/lib/jellyfin/transcodes"
+  ];
+
   environment.systemPackages = with pkgs; [
     jellyfin
     jellyfin-web

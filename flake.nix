@@ -7,6 +7,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     vpn-confinement.url = "github:Maroka-chan/VPN-Confinement";
+    unifi-os-server.url = "github:rcambrj/unifi-os-server";
     claude-code.url = "github:sadjow/claude-code-nix";
     run0-sudo-shim = {
       url = "github:lordgrimmauld/run0-sudo-shim";
@@ -39,6 +40,7 @@
           modules = [
             ./hosts/archivum/configuration.nix
             vpn-confinement.nixosModules.default
+            inputs.unifi-os-server.nixosModules.unifi-os-server
           ]
           ++ defaultModules;
         };

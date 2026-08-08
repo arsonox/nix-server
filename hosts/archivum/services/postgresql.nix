@@ -24,6 +24,11 @@
     startAt = "01:15"; # restic runs at 02:15
   };
 
+  archivum.backup = {
+    paths = [ "/var/backup/postgresql" ];
+    exclude = [ "/var/lib/postgresql" ];
+  };
+
   systemd.services.postgresql.onFailure = [ "notify-failure@%n.service" ];
   systemd.services.postgresqlBackup.onFailure = [ "notify-failure@%n.service" ];
 }
