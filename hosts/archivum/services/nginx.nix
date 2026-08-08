@@ -70,8 +70,6 @@ in
         proxyPass = "https://127.0.0.1:11443";
         proxyWebsockets = true;
         extraConfig = ''
-          # Firmware images and .unf restores are uploaded through the UI, and
-          # the 10m default would 413 them at the worst possible moment.
           client_max_body_size 1G;
           proxy_read_timeout 86400s;
           proxy_send_timeout 86400s;
