@@ -7,6 +7,11 @@
   services.postgresql = {
     enable = true;
     package = pkgs.postgresql_18;
+    enableTCPIP = true;
+    authentication = ''
+      host all all 10.201.0.0/22 scram-sha-256
+      host all all 10.88.0.0/16  scram-sha-256
+    '';
 
     settings = {
       shared_buffers = "2GB"; # small cache due to ZFS arc
@@ -14,6 +19,10 @@
       maintenance_work_mem = "512MB";
       full_page_writes = false; # safe because the data directory is on ZFS
     };
+  };
+
+  networking.firewall = {
+    allowedTCPPorts = [ 5432 ];
   };
 
   services.postgresqlBackup = {
