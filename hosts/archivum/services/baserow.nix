@@ -31,6 +31,7 @@ in
     requires = [ "postgresql-setup.service" ];
     after = [ "postgresql-setup.service" ];
     before = [ "podman-baserow.service" ];
+    requiredBy = [ "podman-baserow.service" ];
     wantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
@@ -42,9 +43,10 @@ in
     };
 
     script = ''
-      ${config.services.postgresql.finalPackage}/bin/psql -v ON_ERROR_STOP=1 \
-        -v pw="$DATABASE_PASSWORD" \
-        -c "ALTER ROLE baserow WITH LOGIN PASSWORD :'pw';"
+      ${config.services.postgresql.finalPackage}/bin/psql \
+        -v ON_ERROR_STOP=1 -v pw="$DATABASE_PASSWORD" <<'SQL'
+      ALTER ROLE baserow WITH LOGIN PASSWORD :'pw';
+      SQL
     '';
 
     onFailure = [ "notify-failure@%n.service" ];
