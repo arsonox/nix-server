@@ -236,6 +236,37 @@ are all-or-nothing for every app at once. In exchange, one `pg_dumpall` in
 restic covers everything. The major is pinned explicitly in the config (see
 above), so no nixpkgs bump will move it under you — the upgrade happens when you
 choose it.
+- [ ] **Mirror `rpool`** (2026-08-08). `tank` has parity; `rpool` — a single
+      NVMe carrying `/`, `/nix`, `/home`, `/var`, and therefore every service's
+      state plus the postgres cluster — does not. Two unused 1 TB NVMes of the
+      identical model are already installed and hold nothing worth keeping
+      (confirmed 2026-08-08), so this is one online `zpool attach` with no
+      downtime and no reinstall. Command is in `hosts/archivum/README.md`.
+
+      Do it **before** archivum becomes the system of record, for the same
+      reason the offsite backup does. Note `/boot` is a plain vfat partition on
+      the same disk and is not protected by this — losing that NVMe still means
+      re-creating `/boot`, just not re-creating the machine.
+
+      **Both spares go in, as a 3-way mirror** (decided 2026-08-08). A hot
+      spare's only edge is replacing a disk unattended, and ZFS faults already
+      push to ntfy in seconds — so it would add a mechanism that fires once a
+      decade for a benefit the alerting covers, while a third mirror member is
+      already resilvered and has no activation to trust.
+
+      Two alternatives were considered and rejected. A separate NVMe pool for
+      postgres buys nothing: `rpool` is already NVMe, `recordsize` is
+      per-dataset, and ARC is global, so the only gain is IO queue isolation
+      that this workload will never notice — and it would leave `/var/lib` and
+      `/home` unprotected. L2ARC on `tank` is worse than nothing:
+      `l2arc_noprefetch=1` excludes exactly the sequential media reads it would
+      be bought for, and the header table costs ARC. If `tank` ever needs help
+      it is a mirrored special vdev, which is a different (and pool-critical)
+      decision.
+
+      Note `/boot` is unprotected either way — a vfat ESP on `nvme0n1p1`, and
+      `systemd-boot` has no `mirroredBoots`. Losing that disk means recreating
+      an ESP, not rebuilding the machine.
 - [x] **cloudflared.** `services.cloudflared` (2026.5.2) with the tunnel
       credentials JSON under `secrets/`. Declarative ingress rules replace the
       container's config.
@@ -379,17 +410,16 @@ Both ends are ZFS, so this is `zfs send | zfs recv`, not rsync.
 
 ### 3a — Rebuild `tank` as raidz1 first
 
-`tank` is currently a **3× 14 TB stripe — zero redundancy** (confirmed
-2026-07-30; the creation command in `hosts/archivum/README.md` has no `raidz1`
-vdev keyword). Any single disk failure loses the whole pool. This must be fixed
-*before* TrueNAS data lands on it, because a stripe→raidz1 conversion is a
-**destroy-and-recreate** — ZFS raidz expansion (2.4.3, in this nixpkgs) can add
-a disk to an existing raidz vdev, but cannot convert a stripe into one.
+**Done (verified 2026-08-08).** `zpool status tank` reads `raidz1-0` across the
+three 14 TB disks, 38.2 T raw / 25.3 T usable, 7.74 M allocated, last scrub
+clean on 2026-08-01.
 
-The rebuild is cheap right now: everything on `tank` today is a copy of data
-that exists in two other locations (confirmed 2026-07-30), so there is nothing
-to evacuate and no Phase 1 dependency — this can happen immediately, and gets
-strictly more expensive the longer it waits.
+It was originally a **3× 14 TB stripe with zero redundancy** (2026-07-30), which
+had to be fixed before any TrueNAS data landed on it: a stripe→raidz1
+conversion is a **destroy-and-recreate**, because ZFS raidz expansion can add a
+disk to an existing raidz vdev but cannot turn a stripe into one. It was cheap
+to do then because everything on `tank` was still a second copy of data held
+elsewhere.
 
 - [x] Sanity-check that nothing new landed: `zfs list -o space -r tank`, eyeball
       `tank/nox`.
@@ -401,6 +431,13 @@ strictly more expensive the longer it waits.
 - [x] Verify with `zpool status tank` — the vdev must read `raidz1-0`.
 - [x] Update `hosts/archivum/README.md`: make the raidz1 command the canonical
       one and drop the stripe warning.
+
+One thing the rebuild left behind: `tank/photos` was created afterwards and
+never got a `fileSystems` entry, so it sat unmounted while syncthing wrote into
+`tank/root` (caught 2026-08-08, fixed in `hardware-configuration.nix`). A ZFS
+dataset on this host is inert until `hardware-configuration.nix` mounts it, and
+the failure is silent — the writes succeed, they just go somewhere with no
+snapshot policy.
 
 Post-rebuild capacity is ≈ 25 TiB usable (down from ≈ 38 TiB) — check incoming
 TrueNAS data fits with headroom before Phase 3b. One disk of parity still means
@@ -467,6 +504,22 @@ Low risk, builds confidence, shrinks the Docker VM.
 - [ ] **homepage vs glance** — you would be running two dashboards.
       `services.homepage-dashboard` (1.12.3) exists if homepage wins; otherwise
       port the tiles into the existing glance config and drop homepage.
+- [x] **baserow** — *new service, not a migration.* `services/baserow.nix`, the
+      all-in-one image in podman on `127.0.0.1:8083` behind
+      `https://baserow.nox.onl`, digest-pinned. This is the reason postgres
+      gained `enableTCPIP` and `scram-sha-256` host rules — the container
+      cannot use the unix socket. It is the second and last podman exception on
+      archivum: no NixOS module exists and upstream supports no other
+      deployment.
+
+      Redis stays embedded rather than becoming a third service, because
+      baserow only uses it as a celery queue and cache. Inert until
+      `hosts/archivum/secrets/baserow.env` exists — see the README for the
+      three keys, none of which are recoverable once data depends on them.
+
+      Follow-up: confirm the on-disk layout under `/var/lib/baserow` after the
+      first start. The restic exclude for `/var/lib/baserow/redis` is taken
+      from upstream's documented `DATA_DIR` layout, not yet observed here.
 - [ ] **qbittorrent** — do *not* migrate the container; archivum's native
       instance is VPN-confined and already points at `/mnt/tank/media`. To keep
       seeding, copy `BT_backup/` from the container's state into
@@ -483,7 +536,7 @@ One at a time, each stop → dump → restore → verify → soak.
       onto archivum, and make sure library paths resolve to `/mnt/tank/media`
       post-Phase-3. Version check: archivum imports the *unstable* jellyfin
       module; do not restore a newer library DB into an older server.
-- [ ] **unifi → UniFi OS Server** — see the dedicated procedure below.
+- [x] **unifi → UniFi OS Server** — see the dedicated procedure below.
       `hosts/ubiqium/services/unifi.nix` is not carried over; ubiqium retires
       with the hypervisor.
 
@@ -582,7 +635,7 @@ Cutover:
 - [x] UOS Server's state is in restic via `/var/lib`, with
       `/var/lib/unifi-os-server/mongodb` **excluded** — a file-by-file walk of
       a live mongo datadir is torn in the same way a live postgres datadir is.
-- [ ] Turn on `.unf` autobackups in the UI once it is up. That, not the mongo
+- [x] Turn on `.unf` autobackups in the UI once it is up. That, not the mongo
       files, is what restic is actually preserving; until it is on there is no
       restorable offsite copy of the controller.
 

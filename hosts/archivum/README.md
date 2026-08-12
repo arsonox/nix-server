@@ -20,6 +20,69 @@ zfs create tank/incomplete
 zfs create tank/photos
 ```
 
+**A dataset is not mounted until `hardware-configuration.nix` says so.** Every
+`tank/*` dataset has `mountpoint=none` and is mounted by an explicit
+`fileSystems."/mnt/tank/<name>"` entry with `options = [ "zfsutil" ]`.
+
+### Current layout
+
+```
+rpool   928G    nvme0n1p2            KIOXIA EXCERIA PLUS G3 1TB
+tank   38.2T    raidz1, 3× 14TB      25.3T usable
+
+nvme1n1, nvme2n1   1TB each, unused  (identical model to rpool's disk)
+```
+
+The two spares are going into `rpool` as a 3-way mirror — see below. They are
+*not* an L2ARC candidate for `tank`: `l2arc_noprefetch=1` means sequential
+reads are never cached, and streaming media arrives entirely through prefetch.
+If `tank` ever needs help it is a mirrored **special vdev** (metadata + small
+blocks), not a cache device.
+
+### Making rpool a 3-way mirror
+
+`rpool` is a single disk holding `/`, `/nix`, `/home` and `/var` — every
+service's state and the postgres cluster. `tank` has parity and `rpool` does
+not, which is backwards: the pool holding the irreplaceable data is the one
+without redundancy, and restic/`pg_dumpall` are nightly, so a disk failure at
+23:00 costs a full day.
+
+Both spare NVMes are the same model, so this is two online commands, no
+downtime, nothing to move. The disks carry stale ZFS labels from an old pool,
+hence the `labelclear` (2026-08-08: confirmed nothing on them is wanted).
+
+```bash
+sudo zpool labelclear -f /dev/nvme1n1p1
+sudo zpool labelclear -f /dev/nvme2n1p1
+
+# attach both to the existing vdev, one at a time
+sudo zpool attach rpool \
+  nvme-KIOXIA-EXCERIA_PLUS_G3_SSD_8E9KF1QUZ0E9-part2 \
+  /dev/disk/by-id/nvme-KIOXIA-EXCERIA_PLUS_G3_SSD_8EAKF1F8Z0E9
+zpool status rpool                     # let the resilver finish (13G — seconds)
+
+sudo zpool attach rpool \
+  nvme-KIOXIA-EXCERIA_PLUS_G3_SSD_8E9KF1QUZ0E9-part2 \
+  /dev/disk/by-id/nvme-KIOXIA-EXCERIA_PLUS_G3_SSD_8E7KF3ZKZ0E9
+zpool status rpool                     # vdev must now read `mirror-0` with 3 members
+```
+
+**`attach`, never `add`.** `add` appends a second top-level vdev, striping the
+pool across it — the opposite of what is wanted, and not undoable. `ashift=12`
+matches automatically since the disks are identical.
+
+Three-way rather than two-way-plus-hot-spare: the third copy is already
+resilvered, so there is no activation to trust and no window at all. A hot
+spare's only advantage is replacing a disk without a human, and ZFS faults
+already push to ntfy within seconds — so it would add a mechanism that fires
+once a decade, for a benefit the alerting already covers.
+
+**`/boot` is not covered by this.** It is a plain vfat partition on
+`nvme0n1p1`, and `systemd-boot` has no equivalent of grub's `mirroredBoots`. If
+`nvme0n1` dies the pool survives on the other two, but the machine will not
+boot until an ESP is recreated — from the installer, or by hand onto a
+surviving disk. Losing that disk costs an hour, not the machine.
+
 ## Samba
 
 After setting up the system, set up samba login with `sudo smbpasswd -a nox`.
@@ -193,6 +256,31 @@ set-inform http://10.201.3.229:8080/inform
 Turn on `.unf` autobackups in the UI (Settings → System → Backups). They land
 in the state dir and restic picks them up. Restic **excludes**
 `/var/lib/unifi-os-server/mongodb`.
+
+## Baserow
+
+`services/baserow.nix` runs the **all-in-one** image
+(`baserow/baserow`, digest-pinned) in podman. UI at 
+`https://baserow.nox.onl`.
+
+### Setup
+
+Baserow is inert until `secrets/baserow.env` exists. Create it with:
+
+```bash
+{
+  echo "DATABASE_PASSWORD=$(openssl rand -hex 32)"
+  echo "SECRET_KEY=$(openssl rand -hex 32)"
+  echo "BASEROW_JWT_SIGNING_KEY=$(openssl rand -hex 32)"
+} > hosts/archivum/secrets/baserow.env
+git add hosts/archivum/secrets/baserow.env
+```
+
+### Backups
+
+The tables live in postgres, so `pg_dumpall` already covers them.
+`/var/lib/baserow` is backed up for the user-uploaded files; restic
+**excludes** `/var/lib/baserow/redis`
 
 ## Snapshots
 
