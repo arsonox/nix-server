@@ -52,10 +52,9 @@ in
     onFailure = [ "notify-failure@%n.service" ];
   };
 
-  # The image bakes in UID/GID 9999 and drops every service (redis, caddy,
-  # backend, celery) to it
+  # The image bakes in UID/GID 9999
   systemd.tmpfiles.rules = lib.mkIf configured [
-    "d /var/lib/baserow 0700 9999 9999 -"
+    "d /var/lib/baserow 0755 9999 9999 -"
   ];
 
   virtualisation.oci-containers.containers.baserow = lib.mkIf configured {
