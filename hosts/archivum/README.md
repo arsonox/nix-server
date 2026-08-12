@@ -269,9 +269,9 @@ Baserow is inert until `secrets/baserow.env` exists. Create it with:
 
 ```bash
 {
-  echo "DATABASE_PASSWORD=$(openssl rand -hex 32)"
-  echo "SECRET_KEY=$(openssl rand -hex 32)"
-  echo "BASEROW_JWT_SIGNING_KEY=$(openssl rand -hex 32)"
+  echo "DATABASE_PASSWORD=$(nix run nixpkgs#openssl -- rand -hex 32)"
+  echo "SECRET_KEY=$(nix run nixpkgs#openssl -- rand -hex 32)"
+  echo "BASEROW_JWT_SIGNING_KEY=$(nix run nixpkgs#openssl -- rand -hex 32)"
 } > hosts/archivum/secrets/baserow.env
 git add hosts/archivum/secrets/baserow.env
 ```
