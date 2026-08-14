@@ -154,11 +154,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1786726958,
-        "narHash": "sha256-s15piJBL1xijXSQtmqK8ZpBu1Q+sv1jPalpHHaySnzg=",
+        "lastModified": 1786731694,
+        "narHash": "sha256-T86SE4EbJrFko1HEFvC8uma4+hAymwrSLTpkIfhoC/M=",
         "ref": "refs/heads/main",
-        "rev": "d2b31b5e11fc64a7cf540bf8e043113f69626ce2",
-        "revCount": 11,
+        "rev": "fe3d2d7f0dfa9b60ed35daf762e9ed3a6c8c6768",
+        "revCount": 12,
         "type": "git",
         "url": "ssh://git@github.com/arsonox/noxinvest2"
       },
