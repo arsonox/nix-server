@@ -22,6 +22,8 @@
 
   hardware.enableAllFirmware = true;
 
+  hardware.graphics.enable = true;
+
   #### TODO: Add settings here
 
   # https://nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion

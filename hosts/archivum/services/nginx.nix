@@ -90,6 +90,12 @@ in
       };
     };
 
+    virtualHosts."invest.nox.onl" = {
+      useACMEHost = "nox.onl";
+      forceSSL = true;
+      locations."/".proxyPass = "http://127.0.0.1:8770";
+    };
+
     virtualHosts."syncthing.nox.onl" = {
       useACMEHost = "nox.onl";
       forceSSL = true;

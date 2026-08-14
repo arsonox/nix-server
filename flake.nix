@@ -9,6 +9,12 @@
     vpn-confinement.url = "github:Maroka-chan/VPN-Confinement";
     unifi-os-server.url = "github:rcambrj/unifi-os-server";
     claude-code.url = "github:sadjow/claude-code-nix";
+    # Private repo: fetched over SSH with the nox user's key, so `nh`/
+    # nixos-rebuild must evaluate as nox (it does) rather than as root.
+    noxinvest = {
+      url = "git+ssh://git@github.com/arsonox/noxinvest2";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     run0-sudo-shim = {
       url = "github:lordgrimmauld/run0-sudo-shim";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -41,6 +47,7 @@
             ./hosts/archivum/configuration.nix
             vpn-confinement.nixosModules.default
             inputs.unifi-os-server.nixosModules.unifi-os-server
+            inputs.noxinvest.nixosModules.default
           ]
           ++ defaultModules;
         };
