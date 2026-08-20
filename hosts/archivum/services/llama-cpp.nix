@@ -10,8 +10,8 @@
     modelsDir = "/mnt/tank/models";
     host = "127.0.0.1";
     port = 8084;
-    "n-gpu-layers" = 99;
-    "ctx-size" = 8192;
+    n-gpu-layers = 99;
+    ctx-size = 8192;
     mlock = true;
   };
 
