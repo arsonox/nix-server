@@ -64,9 +64,9 @@ hosts/<hostname>/
 ### Flake Inputs
 
 Key external dependencies:
-- `nixpkgs`: NixOS 25.11 stable
+- `nixpkgs`: NixOS 26.05 stable
 - `nixpkgs-unstable`: Access via `pkgs.unstable` through overlays
-- `home-manager`: Release 25.11
+- `home-manager`: Release 26.05
 - `vpn-confinement`: VPN namespace confinement (used on archivum)
 - `run0-sudo-shim`: Applied to all hosts via defaultModules
 
@@ -107,4 +107,4 @@ Hosts using ZFS (archivum) require:
 
 ## State Version
 
-Current state version is 25.11 (NixOS 25.11). Do not change stateVersion without understanding the implications (see nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion).
+Hosts pin `system.stateVersion = "25.11"` even though the flake tracks nixpkgs 26.05 — this is intentional. Do not change stateVersion without understanding the implications (see nixos.wiki/wiki/FAQ/When_do_I_update_stateVersion).
