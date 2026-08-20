@@ -7,14 +7,16 @@
   services.llama-cpp = {
     enable = true;
     package = pkgs.llama-cpp-vulkan;
-    settings = {
-      modelsDir = "/mnt/tank/models";
-      host = "127.0.0.1";
-      port = 8084;
-      n-gpu-layers = 99;
-      ctx-size = 8192;
-      mlock = true;
-    };
+    modelsDir = "/mnt/tank/models";
+    host = "127.0.0.1";
+    port = 8084;
+    extraFlags = [
+      "--n-gpu-layers"
+      "99"
+      "--ctx-size"
+      "8192"
+      "--mlock"
+    ];
   };
 
   systemd.tmpfiles.rules = [
