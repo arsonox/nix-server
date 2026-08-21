@@ -9,13 +9,7 @@
     port = 8770;
     hours = 6;
     passwordFile = ../secrets/noxinvestp;
-    regions = [
-      "us"
-      "nl"
-      "de"
-      "fr"
-      "gb"
-    ];
+    #regions = [ "us" "nl" "de" "fr" "gb" ];
   };
 
   systemd.services.noxinvest.onFailure = [ "notify-failure@%n.service" ];
