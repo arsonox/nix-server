@@ -154,11 +154,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787236864,
-        "narHash": "sha256-lIBHdJib/4cUlX8oLAddN0gADkZWmD2zD925BAV5owE=",
+        "lastModified": 1787302393,
+        "narHash": "sha256-whtjHRdRoRkvZyp4YCAt4P3WzVjGY1K53CeRG/uxDFk=",
         "ref": "refs/heads/main",
-        "rev": "a748dab4b47202d55fed4cbe1d8f3c7e7e68fbeb",
-        "revCount": 60,
+        "rev": "55ecc6fc2204cd310761efd4109b9c2dbe043ad5",
+        "revCount": 64,
         "type": "git",
         "url": "ssh://git@github.com/arsonox/noxinvest2"
       },
@@ -258,11 +258,11 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "lastModified": 1783941815,
-        "narHash": "sha256-9S5fNoQpSipPSRijOhgB0JHsZlLQxJzEzgM8Ia9SJz4=",
+        "lastModified": 1787288367,
+        "narHash": "sha256-7YjrSTrscBN93DVxw65zlmD6qRAbbq8DUZHligOgvfw=",
         "owner": "rcambrj",
         "repo": "unifi-os-server",
-        "rev": "075e542294406a2f3449e06dab12765ce56958c3",
+        "rev": "b9f728d7dee18ecd9ab2673c20fdac63e2527dad",
         "type": "github"
       },
       "original": {
