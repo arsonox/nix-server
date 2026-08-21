@@ -8,6 +8,7 @@
     host = "127.0.0.1";
     port = 8770;
     hours = 6;
+    passwordFile = ../secrets/noxinvestp;
     regions = [
       "us"
       "nl"

@@ -16,6 +16,12 @@
   # head -c4 /dev/urandom | od -A none -t x4
   networking.hostId = "4b6d8560";
 
+  # Do not pass -f to `zpool import` for rpool: the hostId above is stable and
+  # the disks are local, so the hostid safeguard should never fire. This is the
+  # new upstream default from 26.11 on; set explicitly since stateVersion is 25.11.
+  # If a boot ever fails to import rpool, boot once with `zfs_force=1`.
+  boot.zfs.forceImportRoot = false;
+
   services.zfs.autoScrub = {
     enable = true;
   };

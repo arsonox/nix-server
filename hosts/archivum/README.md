@@ -276,6 +276,40 @@ Baserow is inert until `secrets/baserow.env` exists. Create it with:
 git add hosts/archivum/secrets/baserow.env
 ```
 
+### The data dir needs mode 0755, not just the right owner
+
+`/var/lib/baserow` is `0755` owned by **UID/GID 9999**. Both halves matter, and
+the mode is the one that actually bites.
+
+The image bakes in 9999 and runs caddy, the backend and celery as it — but not
+redis, which supervisor starts as its own `redis` user (`user=redis` in
+`supervisor/includes/disabled/embedded-redis.conf`). `baserow.sh` chowns
+`DATA_DIR/redis` to `redis:redis` on every start, so that subdirectory is
+always right. What breaks is the **parent**: at `0700` the redis user cannot
+traverse into `DATA_DIR` to reach it, no matter who owns it. Redis then dies
+with `FATAL CONFIG FILE ERROR … 'dir "/baserow/data/redis"' Permission denied`,
+and every migration traceback after that is a cascade from that one line.
+
+`0755` is simply what upstream's own `mkdir -p` produces, so this matches what
+the image expects rather than second-guessing it. The sensitive files under
+`DATA_DIR/secrets` are `chmod 600`ed by baserow itself.
+
+Upstream avoids this by recommending a named volume, which inherits ownership
+from the image. That is the wrong trade here — a named volume lives under
+`/var/lib/containers`, which restic excludes as re-pullable, so the user
+uploads would silently stop being backed up. Hence a bind mount with the
+ownership set on the host by tmpfiles.
+
+Do **not** `chown -R 9999:9999` the tree to fix this — that takes
+`DATA_DIR/redis` away from the redis user. Only the top level is ours; the
+entrypoint owns the subdirectories:
+
+```bash
+sudo chmod 0755 /var/lib/baserow
+sudo chown 9999:9999 /var/lib/baserow
+sudo systemctl restart podman-baserow
+```
+
 ### Backups
 
 The tables live in postgres, so `pg_dumpall` already covers them.

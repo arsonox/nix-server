@@ -117,11 +117,11 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1787101114,
-        "narHash": "sha256-gwrPcFf/rDjHPaVflbDZ040ZDmBTRj/7+s8ZmE2SaIM=",
+        "lastModified": 1787204541,
+        "narHash": "sha256-OURZPknrTjQrlNyxPdqzyqmU/81Wes1CUP/Ft1Rv/YI=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "b18a4b905f8d028dc4476412e6d6891728695379",
+        "rev": "5880666fd9eb563038431edb35c2d0aa595884e6",
         "type": "github"
       },
       "original": {
@@ -154,11 +154,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787302393,
-        "narHash": "sha256-whtjHRdRoRkvZyp4YCAt4P3WzVjGY1K53CeRG/uxDFk=",
+        "lastModified": 1787306928,
+        "narHash": "sha256-zO19Wa/LXgaq84Fy72KNWsD/hEIM3vQFpdewLh1uVTg=",
         "ref": "refs/heads/main",
-        "rev": "55ecc6fc2204cd310761efd4109b9c2dbe043ad5",
-        "revCount": 64,
+        "rev": "b0018ed9185bd61442e103643dfee26cc1a1cf03",
+        "revCount": 66,
         "type": "git",
         "url": "ssh://git@github.com/arsonox/noxinvest2"
       },
