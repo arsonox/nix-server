@@ -19,4 +19,12 @@
   };
 
   systemd.services.noxinvest.onFailure = [ "notify-failure@%n.service" ];
+
+  services.nginx.virtualHosts."noxinvest.nox.onl" = {
+    useACMEHost = "nox.onl";
+    forceSSL = true;
+    locations."/" = {
+      proxyPass = "http://127.0.0.1:8770";
+    };
+  };
 }
