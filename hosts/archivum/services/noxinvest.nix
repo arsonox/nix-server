@@ -9,6 +9,7 @@
     port = 8770;
     hours = 6;
     passwordFile = ../secrets/noxinvestp;
+    searx = "https://sx.nox.onl";
     #regions = [ "us" "nl" "de" "fr" "gb" ];
   };
 
