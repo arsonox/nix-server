@@ -19,7 +19,7 @@ in
     recommendedTlsSettings = true;
 
     commonHttpConfig = ''
-      http2 on;
+      http2 off;
       ssl_early_data on;
     '';
 
