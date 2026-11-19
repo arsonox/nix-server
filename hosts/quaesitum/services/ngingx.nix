@@ -32,7 +32,7 @@ in
       "sx.nox.onl" = {
         forceSSL = true;
         enableACME = true;
-        http3 = true;
+        http3 = false;
         quic = true;
         locations = {
           "/" = {
