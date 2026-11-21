@@ -2,7 +2,11 @@ name: update-flake
 on:
   workflow_dispatch: # allows manual triggering
   schedule:
-    - cron: "0 1 * * *" # daily at 1 am UTC
+    - cron: "23 0 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   update-dependencies:
@@ -19,7 +23,16 @@ jobs:
       - id: update
         uses: DeterminateSystems/update-flake-lock@v23
       - name: Merge
-        run: gh pr merge --auto "${{ steps.update.outputs.pull-request-number }}" --rebase
+        run: |
+          pr="${{ steps.update.outputs.pull-request-number }}"
+          for i in 1 2 3 4 5 6; do
+            if gh pr merge "$pr" --rebase --repo "$GITHUB_REPOSITORY"; then
+              exit 0
+            fi
+            echo "merge attempt $i failed, retrying in $((i * 20))s"
+            sleep $((i * 20))
+          done
+          exit 1
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: ${{ steps.update.outputs.pull-request-number != '' }}
